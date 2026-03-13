@@ -1,0 +1,255 @@
+# =============================================================================
+# MULTI-AGENT AI SYSTEM — MASTER CONFIGURATION
+# =============================================================================
+# This is the ONLY file you need to edit to configure the entire system.
+# All settings, model assignments, token limits, and pricing are controlled here.
+# =============================================================================
+
+
+# =============================================================================
+# API KEYS
+# =============================================================================
+# Each key references an environment variable name from your .env file.
+# NEVER paste actual API keys here — only the variable names.
+# =============================================================================
+
+api_keys:
+  # DeepSeek API key — get yours at https://platform.deepseek.com/api_keys
+  deepseek: "DEEPSEEK_API_KEY"
+
+  # Google Gemini API key — get yours at https://aistudio.google.com/apikey
+  gemini: "GEMINI_API_KEY"
+
+  # OpenAI API key — get yours at https://platform.openai.com/api-keys
+  openai: "OPENAI_API_KEY"
+
+
+# =============================================================================
+# API BASE URLS
+# =============================================================================
+# Base URLs for each provider's API endpoint.
+# You generally don't need to change these unless using a proxy or custom endpoint.
+# =============================================================================
+
+api_base_urls:
+  deepseek: "https://api.deepseek.com"
+  gemini: "https://generativelanguage.googleapis.com/v1beta"
+  openai: "https://api.openai.com/v1"
+
+
+# =============================================================================
+# MODEL ASSIGNMENTS
+# =============================================================================
+# Each agent is assigned a model and a provider.
+# To change which model an agent uses, just edit the "model" and "provider" fields.
+# =============================================================================
+
+agents:
+
+  # --- LAYER 1: THINKING LAYER ---
+
+  # Agent 1 — Takes the raw idea and expands it into a full concept
+  visionary:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 2 — Reviews the Visionary's output and challenges it
+  critic:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 3 — Makes the final architectural decision on the idea
+  architect:
+    model: "deepseek-reasoner"
+    provider: "deepseek"
+
+  # --- LAYER 2: BUILD LAYER ---
+
+  # Agent 4 — Writes the core working code based on the plan
+  coder:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 5 — Reviews the code for quality, bugs, and best practices
+  code_reviewer:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 6 — Fixes code when tests or syntax checks fail (runs in loop)
+  code_fixer:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 7 — Writes integration test scripts to test the running app
+  integration_test_writer:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 8 — Prepares README, folder structure, and deployment steps
+  devops:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # --- LAYER 3: BUSINESS LAYER ---
+
+  # Agent 7 — Researches market landscape, competitors, and trends
+  market_researcher:
+    model: "gemini-2.5-flash"
+    provider: "gemini"
+
+  # Agent 8 — Designs the business model and go-to-market strategy
+  business_strategist:
+    model: "deepseek-reasoner"
+    provider: "deepseek"
+
+  # Agent 9 — Writes an investor-ready one-page pitch
+  pitch_writer:
+    model: "gpt-4o-mini"
+    provider: "openai"
+
+  # --- LAYER 4: LAUNCH LAYER ---
+
+  # Agent 10 — Creates marketing content for launch day
+  marketing:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 11 — Builds the SEO and content strategy
+  seo:
+    model: "gemini-2.5-flash"
+    provider: "gemini"
+
+  # Agent 14 — Final quality gate before the Summarizer
+  qa_reviewer:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+  # Agent 15 — Compiles all outputs into one final deliverable
+  summarizer:
+    model: "deepseek-chat"
+    provider: "deepseek"
+
+
+# =============================================================================
+# TOKEN LIMITS
+# =============================================================================
+# Maximum output tokens each agent is allowed to generate.
+# Increase or decrease these to control cost and output length.
+# =============================================================================
+
+token_limits:
+  visionary: 500
+  critic: 400
+  architect: 600
+  coder: 1000
+  code_reviewer: 800
+  code_fixer: 1000
+  integration_test_writer: 800
+  devops: 500
+  market_researcher: 500
+  business_strategist: 600
+  pitch_writer: 400
+  marketing: 400
+  seo: 400
+  qa_reviewer: 500
+  summarizer: 800
+
+
+# =============================================================================
+# PRICING
+# =============================================================================
+# Cost per 1 million tokens in Indian Rupees (INR).
+# The cost tracker reads from here — update if provider pricing changes.
+# =============================================================================
+
+pricing:
+  deepseek-chat:
+    input_per_million: 23      # INR per 1M input tokens
+    output_per_million: 35     # INR per 1M output tokens
+
+  deepseek-reasoner:
+    input_per_million: 46      # INR per 1M input tokens
+    output_per_million: 184    # INR per 1M output tokens
+
+  gemini-2.5-flash:
+    input_per_million: 25      # INR per 1M input tokens
+    output_per_million: 210    # INR per 1M output tokens
+
+  gpt-4o-mini:
+    input_per_million: 21      # INR per 1M input tokens
+    output_per_million: 168    # INR per 1M output tokens
+
+
+# =============================================================================
+# PIPELINE SETTINGS
+# =============================================================================
+# Controls how the pipeline behaves during execution.
+# =============================================================================
+
+pipeline:
+  # How many times to retry a failed agent API call before giving up
+  max_retries: 3
+
+  # How many seconds to wait between retries
+  retry_delay_seconds: 5
+
+  # If true, continue the pipeline even if an agent fails after all retries.
+  # If false, stop the entire pipeline on any failure.
+  continue_on_failure: true
+
+  # Name of the final output file (without extension — .md is added automatically)
+  output_filename: "final_output"
+
+  # Folder where the final output file is saved
+  output_folder: "output"
+
+
+# =============================================================================
+# CODE EXECUTION & TESTING SETTINGS
+# =============================================================================
+# Controls how the build-test-fix loop and integration tests work.
+# =============================================================================
+
+code_execution:
+  # Folder where the generated project code is extracted to
+  # Change this to control where the built application lives
+  project_folder: "generated_project"
+
+  # Max attempts to fix code if tests fail (each attempt calls Code Fixer agent)
+  max_fix_attempts: 3
+
+  # Max attempts to fix integration test failures
+  max_integration_fix_attempts: 3
+
+  # Timeout in seconds for running tests
+  test_timeout_seconds: 30
+
+  # How long to wait for the server to start before running integration tests
+  server_startup_wait_seconds: 5
+
+  # Port to run the app on for integration testing
+  localhost_port: 8000
+
+  # Set to false to skip code execution and integration tests entirely
+  enable_code_testing: true
+
+  # Set to false to skip only integration tests (still does syntax/run checks)
+  enable_integration_tests: true
+
+
+# =============================================================================
+# CACHING SETTINGS
+# =============================================================================
+# Enable or disable prompt caching per provider.
+# When enabled, repeated system prompts are cached to reduce input costs.
+# =============================================================================
+
+caching:
+  # DeepSeek supports prompt caching — can reduce input costs by up to 90%
+  deepseek: true
+
+  # Gemini context caching
+  gemini: false
+
+  # OpenAI prompt caching
+  openai: false
