@@ -13,25 +13,16 @@ logger = logging.getLogger(__name__)
 
 # Section headers for each agent in the final output
 SECTION_HEADERS = {
-    "visionary": "Visionary's Expanded Concept",
-    "critic": "Critic's Challenges and Risks",
-    "architect": "Architect's Final Plan",
-    "coder": "Working Code (Coder)",
-    "code_reviewer": "Reviewed Code (Code Reviewer)",
-    "code_test_result": "Code Test Results",
-    "integration_test_result": "Integration Test Results",
-    "devops": "DevOps Setup Instructions & README",
-    "market_researcher": "Market Research Report",
-    "business_strategist": "Business Strategy & Go-to-Market Plan",
-    "pitch_writer": "Investor Pitch",
-    "marketing": "Marketing Copy & Social Posts",
-    "seo": "SEO Strategy & Content Plan",
-    "qa_reviewer": "QA Review",
-    "summarizer": "Full Summary (Summarizer)",
+    "visionary": "Visionary — Expanded Approaches",
+    "researcher": "Researcher — Real-World Evidence",
+    "critic": "Critic — Stress Test",
+    "defender": "Defender — Rebuttal",
+    "devils_advocate": "Devil's Advocate — Alternative Framing",
+    "mediator": "Mediator — Synthesis",
+    "architect": "Architect — Final Decision & Plan",
+    "validator": "Validator — Feasibility, Risks & Quality",
+    "summarizer": "Final Summary & Recommendation",
 }
-
-# Extra output keys that appear between agents (not in AGENT_ORDER)
-EXTRA_OUTPUT_KEYS = ["code_test_result", "integration_test_result"]
 
 
 def format_output(
@@ -52,11 +43,11 @@ def format_output(
     sections = []
 
     # Title
-    sections.append("# Multi-Agent AI System — Final Output Report")
+    sections.append("# Multi-Agent Debate System — Final Report")
     sections.append(f"*Generated on {timestamp} | Pipeline took {elapsed_seconds:.1f}s*\n")
 
-    # Original idea
-    sections.append("---\n## 1. Original User Idea\n")
+    # Original question
+    sections.append("---\n## 1. Original Question / Idea\n")
     sections.append(user_idea)
 
     # Each agent's output
@@ -76,16 +67,6 @@ def format_output(
                 f"> **This agent did not produce output.**\n> Error: {error}"
             )
         section_num += 1
-
-        # Insert test results after code_reviewer
-        if agent_name == "code_reviewer":
-            for extra_key in EXTRA_OUTPUT_KEYS:
-                if extra_key in outputs and outputs[extra_key]:
-                    header = SECTION_HEADERS.get(extra_key, extra_key)
-                    sections.append(f"\n---\n## {section_num}. {header}")
-                    sections.append(f"*Layer 2 — Build (Testing)*\n")
-                    sections.append(outputs[extra_key])
-                    section_num += 1
 
     # Cost breakdown
     sections.append(f"\n---\n## {section_num}. Cost Breakdown\n")

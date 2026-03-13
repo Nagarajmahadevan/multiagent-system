@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Multi-Agent AI System — Main Entry Point
-=========================================
-Takes a raw idea from the user and runs it through 12 specialized AI agents
-to produce a complete, launch-ready output including working code,
-a business plan, and marketing materials.
+Multi-Agent Debate System — Main Entry Point
+=============================================
+Takes a question or idea from the user and runs it through 11 specialized
+AI agents that explore, debate, and converge on the best solution.
 
 Usage:
     python main.py
-    python main.py --idea "Your idea here"
+    python main.py --idea "Your question here"
 """
 
 import sys
@@ -34,20 +33,20 @@ def setup_logging():
 
 
 def get_idea(args) -> str:
-    """Get the user's idea from CLI args or interactive prompt."""
+    """Get the user's question from CLI args or interactive prompt."""
     if args.idea:
         return args.idea.strip()
 
     print("\n" + "=" * 60)
-    print("  MULTI-AGENT AI SYSTEM")
-    print("  From idea to launch-ready package — fully autonomous")
+    print("  MULTI-AGENT DEBATE SYSTEM")
+    print("  Explore, debate, and solve — powered by AI agents")
     print("=" * 60)
-    print("\nEnter your idea below. Be as detailed or brief as you like.")
-    print("The system will expand, challenge, build, and package it.\n")
+    print("\nEnter your question or idea below.")
+    print("The agents will explore, debate, and find the best solution.\n")
 
-    idea = input("Your idea: ").strip()
+    idea = input("Your question: ").strip()
     if not idea:
-        print("No idea provided. Exiting.")
+        print("No question provided. Exiting.")
         sys.exit(1)
 
     return idea
@@ -63,35 +62,22 @@ def main():
 
     # Parse CLI arguments
     parser = argparse.ArgumentParser(
-        description="Run a raw idea through 12 AI agents to produce a launch-ready package."
+        description="Run a question through 11 AI agents that debate and find the best solution."
     )
     parser.add_argument(
         "--idea",
         type=str,
         default=None,
-        help="The raw idea to process. If not provided, you'll be prompted interactively.",
-    )
-    parser.add_argument(
-        "--folder",
-        type=str,
-        default=None,
-        help="Folder path where the generated project, tests, and outputs will be created.",
+        help="The question or idea to process. If not provided, you'll be prompted interactively.",
     )
     args = parser.parse_args()
 
     # Get the idea
     user_idea = get_idea(args)
-    logger.info(f"Idea received: {user_idea[:100]}...")
+    logger.info(f"Question received: {user_idea[:100]}...")
 
     # Load config
     config = load_config()
-
-    # Resolve project folder from CLI arg
-    if args.folder:
-        project_folder = os.path.abspath(args.folder)
-        config["code_execution"]["project_folder"] = project_folder
-        config["pipeline"]["output_folder"] = os.path.join(project_folder, "output")
-        logger.info(f"Project folder: {project_folder}")
 
     # Run the pipeline
     pipeline = Pipeline(config)

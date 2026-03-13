@@ -63,6 +63,8 @@ class APIClient:
             return self._call_gemini(model, system_prompt, user_prompt, max_tokens)
         elif provider == "openai":
             return self._call_openai(model, system_prompt, user_prompt, max_tokens)
+        elif provider == "anthropic":
+            return self._call_anthropic(model, system_prompt, user_prompt, max_tokens)
         else:
             raise ValueError(f"Unknown provider '{provider}' for agent '{agent_name}'")
 
@@ -197,5 +199,48 @@ class APIClient:
             "content": content,
             "input_tokens": usage.get("prompt_tokens", 0),
             "output_tokens": usage.get("completion_tokens", 0),
+            "model": model,
+        }
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Anthropic (Claude)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _call_anthropic(
+        self, model: str, system_prompt: str, user_prompt: str, max_tokens: int
+    ) -> dict:
+        api_key = get_api_key("anthropic", self.config)
+        url = f"{self.base_urls['anthropic']}/messages"
+
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system_prompt,
+            "messages": [
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+
+        resp = requests.post(url, json=payload, headers=headers, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+
+        content = ""
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                content += block.get("text", "")
+
+        usage = data.get("usage", {})
+
+        return {
+            "content": content,
+            "input_tokens": usage.get("input_tokens", 0),
+            "output_tokens": usage.get("output_tokens", 0),
             "model": model,
         }
