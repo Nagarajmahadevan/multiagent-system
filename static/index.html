@@ -385,6 +385,7 @@
     }
     #recharge-overlay.hidden { display:none; }
     .recharge-card {
+      position: relative;
       background: var(--sidebar-bg);
       border: 1px solid #2e2e2e;
       border-radius: 20px;
@@ -456,6 +457,7 @@
 <!-- ── Recharge Modal ── -->
 <div id="recharge-overlay" class="hidden">
   <div class="recharge-card">
+    <button onclick="document.getElementById('recharge-overlay').classList.add('hidden')" style="position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;">×</button>
     <div class="recharge-icon">⚡</div>
     <h2>Top up to continue</h2>
     <p>You've used your free query. Add balance to keep exploring with 10 AI agents.</p>
@@ -1173,6 +1175,16 @@
       btn.disabled = false;
     }
   }
+
+  // Close recharge modal on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const overlay = document.getElementById('recharge-overlay');
+      if (!overlay.classList.contains('hidden')) {
+        overlay.classList.add('hidden');
+      }
+    }
+  });
 
   // Render welcome screen
   chat().appendChild(buildWelcome());
