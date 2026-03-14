@@ -347,6 +347,60 @@
       transition: border-color .2s, color .2s;
     }
     .signout-btn:hover { border-color: #f87171; color: #f87171; }
+
+    /* ── Recharge modal ── */
+    #recharge-overlay {
+      position:fixed; inset:0; z-index:1001;
+      background: rgba(0,0,0,.7); backdrop-filter: blur(4px);
+      display:flex; align-items:center; justify-content:center;
+    }
+    #recharge-overlay.hidden { display:none; }
+    .recharge-card {
+      background: var(--sidebar-bg);
+      border: 1px solid #2e2e2e;
+      border-radius: 20px;
+      padding: 40px 36px;
+      text-align: center;
+      max-width: 360px;
+      width: 90%;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    }
+    .recharge-icon { font-size: 40px; margin-bottom: 14px; }
+    .recharge-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .recharge-card p  { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 28px; }
+    .pack-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 10px; margin-bottom: 20px;
+    }
+    .pack-btn {
+      padding: 14px 8px; border-radius: 12px;
+      border: 1px solid #3a3a3a; background: var(--card-bg);
+      color: var(--text); cursor: pointer; font-family: inherit;
+      transition: border-color .2s, background .2s;
+    }
+    .pack-btn:hover, .pack-btn.selected {
+      border-color: #3b82f6; background: rgba(59,130,246,.1);
+    }
+    .pack-amount { font-size: 18px; font-weight: 700; color: #4ade80; }
+    .pack-label  { font-size: 10px; color: var(--muted); margin-top: 3px; }
+    .custom-input-wrap {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--input-bg); border: 1px solid #404040;
+      border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
+    }
+    .custom-input-wrap span { color: var(--muted); font-size: 14px; }
+    #custom-amount {
+      flex:1; background: transparent; border: none; outline: none;
+      color: var(--text); font-size: 14px; font-family: inherit;
+    }
+    .pay-btn {
+      width: 100%; padding: 13px; border: none; border-radius: 10px;
+      background: #2563eb; color: #fff;
+      font-size: 14px; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: background .2s;
+    }
+    .pay-btn:hover { background: #3b82f6; }
+    .pay-btn:disabled { opacity: .4; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -367,6 +421,37 @@
       Continue with Google
     </button>
     <div class="login-footer">By signing in, you agree to our terms of service.</div>
+  </div>
+</div>
+
+<!-- ── Recharge Modal ── -->
+<div id="recharge-overlay" class="hidden">
+  <div class="recharge-card">
+    <div class="recharge-icon">⚡</div>
+    <h2>Top up to continue</h2>
+    <p>You've used your free query. Add balance to keep exploring with 10 AI agents.</p>
+    <div class="pack-grid">
+      <button class="pack-btn" onclick="selectPack(10)">
+        <div class="pack-amount">₹10</div>
+        <div class="pack-label">Starter</div>
+      </button>
+      <button class="pack-btn" onclick="selectPack(50)">
+        <div class="pack-amount">₹50</div>
+        <div class="pack-label">Popular</div>
+      </button>
+      <button class="pack-btn" onclick="selectPack(100)">
+        <div class="pack-amount">₹100</div>
+        <div class="pack-label">Best value</div>
+      </button>
+    </div>
+    <div class="custom-input-wrap">
+      <span>₹</span>
+      <input id="custom-amount" type="number" min="10" placeholder="Enter amount (min ₹10)"
+        oninput="onCustomAmount()" />
+    </div>
+    <button class="pay-btn" id="pay-btn" onclick="startPayment()" disabled>
+      Pay & Continue
+    </button>
   </div>
 </div>
 
@@ -769,11 +854,28 @@
     setStatus('⟳ Starting…', 'running');
 
     try {
+      // Get auth token
+      let authToken = '';
+      if (sbClient) {
+        const { data: { session } } = await sbClient.auth.getSession();
+        authToken = session?.access_token || '';
+      }
+
       const res = await fetch('/run', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
         body: JSON.stringify({ idea }),
       });
+
+      // No balance — show recharge modal
+      if (res.status === 402) {
+        showRechargeModal();
+        throw new Error('__recharge__');
+      }
+
       if (!res.ok) throw new Error('HTTP ' + res.status);
 
       const reader = res.body.getReader();
@@ -793,7 +895,7 @@
         }
       }
     } catch (e) {
-      setStatus('✕ ' + e.message, 'error');
+      if (e.message !== '__recharge__') setStatus('✕ ' + e.message, 'error');
     } finally {
       running = false;
       ta.disabled = false;
@@ -880,6 +982,43 @@
   async function signOut() {
     if (!sbClient) return;
     await sbClient.auth.signOut();
+  }
+
+  // ── Recharge modal ────────────────────────────────────────────────────────
+  let selectedAmount = 0;
+
+  function showRechargeModal() {
+    running = false;
+    ta.disabled = false;
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('recharge-overlay').classList.remove('hidden');
+  }
+
+  function selectPack(amount) {
+    selectedAmount = amount;
+    document.getElementById('custom-amount').value = '';
+    document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+    document.getElementById('pay-btn').disabled = false;
+  }
+
+  function onCustomAmount() {
+    const val = parseInt(document.getElementById('custom-amount').value);
+    selectedAmount = (val >= 10) ? val : 0;
+    document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById('pay-btn').disabled = selectedAmount < 10;
+  }
+
+  async function startPayment() {
+    if (selectedAmount < 10) return;
+    // Razorpay integration coming in Step 5
+    // For now show a coming soon message
+    document.getElementById('pay-btn').textContent = 'Payment coming soon…';
+    document.getElementById('pay-btn').disabled = true;
+    setTimeout(() => {
+      document.getElementById('pay-btn').textContent = 'Pay & Continue';
+      document.getElementById('pay-btn').disabled = false;
+    }, 2000);
   }
 
   // Init on page load
