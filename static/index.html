@@ -6,6 +6,7 @@
   <title>Multi-Agent Debate System</title>
   <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -435,12 +436,12 @@
         <div class="pack-amount">₹10</div>
         <div class="pack-label">Starter</div>
       </button>
-      <button class="pack-btn" onclick="selectPack(50)">
-        <div class="pack-amount">₹50</div>
+      <button class="pack-btn" onclick="selectPack(500)">
+        <div class="pack-amount">₹500</div>
         <div class="pack-label">Popular</div>
       </button>
-      <button class="pack-btn" onclick="selectPack(100)">
-        <div class="pack-amount">₹100</div>
+      <button class="pack-btn" onclick="selectPack(1000)">
+        <div class="pack-amount">₹1000</div>
         <div class="pack-label">Best value</div>
       </button>
     </div>
@@ -1011,14 +1012,69 @@
 
   async function startPayment() {
     if (selectedAmount < 10) return;
-    // Razorpay integration coming in Step 5
-    // For now show a coming soon message
-    document.getElementById('pay-btn').textContent = 'Payment coming soon…';
-    document.getElementById('pay-btn').disabled = true;
-    setTimeout(() => {
-      document.getElementById('pay-btn').textContent = 'Pay & Continue';
-      document.getElementById('pay-btn').disabled = false;
-    }, 2000);
+    const btn = document.getElementById('pay-btn');
+    btn.textContent = 'Creating order…';
+    btn.disabled = true;
+
+    try {
+      // Get auth token
+      const { data: { session } } = await sbClient.auth.getSession();
+      const token = session?.access_token || '';
+
+      // Create Razorpay order on backend
+      const orderRes = await fetch('/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ amount_inr: selectedAmount }),
+      });
+      const order = await orderRes.json();
+      if (!orderRes.ok) throw new Error(order.error || 'Order creation failed');
+
+      // Open Razorpay checkout
+      const options = {
+        key: order.key_id,
+        amount: order.amount,
+        currency: 'INR',
+        name: 'Multi-Agent Debate System',
+        description: `Top up ₹${selectedAmount}`,
+        order_id: order.order_id,
+        prefill: { email: session?.user?.email || '' },
+        theme: { color: '#2563eb' },
+        handler: async (response) => {
+          // Verify payment on backend and add credits
+          const verifyRes = await fetch('/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              amount_inr: selectedAmount,
+            }),
+          });
+          if (verifyRes.ok) {
+            document.getElementById('recharge-overlay').classList.add('hidden');
+            setStatus('✓ Top up successful! Ready.', '');
+          } else {
+            alert('Payment verification failed. Contact support.');
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            btn.textContent = 'Pay & Continue';
+            btn.disabled = false;
+          }
+        }
+      };
+
+      const rzp = new Razorpay(options);
+      rzp.open();
+
+    } catch (e) {
+      alert('Payment error: ' + e.message);
+      btn.textContent = 'Pay & Continue';
+      btn.disabled = false;
+    }
   }
 
   // Init on page load

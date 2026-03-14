@@ -30,6 +30,10 @@ static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# ── Razorpay config ───────────────────────────────────────────────────────────
+RAZORPAY_KEY_ID     = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
 # ── Credit config ─────────────────────────────────────────────────────────────
 SUPABASE_URL         = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
@@ -94,6 +98,76 @@ def get_config():
         "supabase_url": SUPABASE_URL,
         "supabase_anon_key": os.getenv("SUPABASE_ANON_KEY", ""),
     })
+
+
+@app.post("/create-order")
+async def create_order(request: Request):
+    """Create a Razorpay order for the given amount."""
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        return JSONResponse({"error": "Payments not configured"}, status_code=503)
+
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    body = await request.json()
+    amount_inr = int(body.get("amount_inr", 0))
+    if amount_inr < 10:
+        return JSONResponse({"error": "Minimum recharge is ₹10"}, status_code=400)
+
+    import razorpay
+    client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    order = client.order.create({
+        "amount": amount_inr * 100,  # paise
+        "currency": "INR",
+        "payment_capture": 1,
+    })
+    return JSONResponse({
+        "order_id": order["id"],
+        "amount": order["amount"],
+        "key_id": RAZORPAY_KEY_ID,
+    })
+
+
+@app.post("/verify-payment")
+async def verify_payment(request: Request):
+    """Verify Razorpay payment signature and credit the user."""
+    import razorpay, hmac, hashlib
+
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    body = await request.json()
+    order_id   = body.get("razorpay_order_id", "")
+    payment_id = body.get("razorpay_payment_id", "")
+    signature  = body.get("razorpay_signature", "")
+    amount_inr = int(body.get("amount_inr", 0))
+
+    # Verify signature
+    msg = f"{order_id}|{payment_id}".encode()
+    expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), msg, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        return JSONResponse({"error": "Invalid payment signature"}, status_code=400)
+
+    # Add credits
+    sb = get_sb_admin()
+    if sb:
+        try:
+            result = sb.table("user_credits").select("balance_paise").eq("user_id", user_id).execute()
+            add_paise = amount_inr * 100
+            if result.data:
+                new_bal = result.data[0]["balance_paise"] + add_paise
+                sb.table("user_credits").update({"balance_paise": new_bal}).eq("user_id", user_id).execute()
+            else:
+                sb.table("user_credits").insert({"user_id": user_id, "balance_paise": add_paise}).execute()
+        except Exception as e:
+            logger.error(f"Credit top-up error: {e}")
+            return JSONResponse({"error": "Failed to add credits"}, status_code=500)
+
+    return JSONResponse({"success": True})
 
 
 @app.get("/credits")

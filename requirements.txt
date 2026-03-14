@@ -5,3 +5,4 @@ fastapi>=0.110.0
 uvicorn>=0.29.0
 python-multipart>=0.0.9
 supabase>=2.0.0
+razorpay>=1.4.0
