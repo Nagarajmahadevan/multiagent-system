@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(.venv/bin/pip install:*)",
-      "Bash(.venv/bin/python -c \"import fastapi, uvicorn; print\\(''fastapi'', fastapi.__version__, ''| uvicorn'', uvicorn.__version__\\)\")"
+      "Bash(.venv/bin/python -c \"import fastapi, uvicorn; print\\(''fastapi'', fastapi.__version__, ''| uvicorn'', uvicorn.__version__\\)\")",
+      "Bash(ls /Users/nagarajmahadevan/development/Multi_Agent_System/multiagent-system/*.py /Users/nagarajmahadevan/development/Multi_Agent_System/multiagent-system/requirements*.txt)"
     ]
   }
 }

@@ -270,9 +270,18 @@
     #user-input {
       flex:1; background:transparent; border:none; outline:none;
       color:var(--text); font-size:14px; font-family:inherit;
-      resize:none; max-height:180px; min-height:22px; line-height:1.5;
+      resize:none; max-height:72px; min-height:22px; line-height:1.5;
+      overflow-y:hidden; transition:max-height .2s ease;
     }
+    #user-input.expanded { max-height:300px; overflow-y:auto; }
     #user-input::placeholder { color:var(--muted); }
+    #expand-btn {
+      display:none; align-self:flex-end; margin-bottom:6px;
+      background:none; border:none; color:#60a5fa; font-size:11px;
+      cursor:pointer; padding:0 2px; white-space:nowrap; flex-shrink:0;
+      font-family:inherit;
+    }
+    #expand-btn:hover { color:#93c5fd; }
     #send-btn {
       background:#2563eb; border:none; border-radius:9px;
       width:34px; height:34px; cursor:pointer; flex-shrink:0;
@@ -388,6 +397,7 @@
   <div class="input-wrap">
     <textarea id="user-input" rows="1"
       placeholder="Ask anything — the agents will debate and find the best answer…"></textarea>
+    <button id="expand-btn" type="button">Read more</button>
     <button id="send-btn" onclick="submit()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -422,12 +432,49 @@
   let totalCost = 0, totalIn = 0, totalOut = 0, doneCount = 0;
   let ACTIVE_TOTAL = 10;
 
-  // ── Textarea auto-grow ────────────────────────────────────────────────────
+  // ── Textarea auto-grow + expand toggle ───────────────────────────────────
   const ta = document.getElementById('user-input');
+  const expandBtn = document.getElementById('expand-btn');
+  const COLLAPSED_MAX = 72; // ~3 lines
+
+  function updateExpandBtn() {
+    // scrollHeight reflects full content height when height is auto
+    const clone = ta.cloneNode(true);
+    clone.style.cssText = 'position:absolute;visibility:hidden;height:auto;max-height:none;overflow:hidden;width:' + ta.offsetWidth + 'px';
+    document.body.appendChild(clone);
+    const fullH = clone.scrollHeight;
+    document.body.removeChild(clone);
+    const overflows = fullH > COLLAPSED_MAX + 4;
+    expandBtn.style.display = overflows ? 'block' : 'none';
+  }
+
   ta.addEventListener('input', () => {
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 180) + 'px';
+    if (!ta.classList.contains('expanded')) {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, COLLAPSED_MAX) + 'px';
+    }
+    updateExpandBtn();
   });
+
+  ta.addEventListener('paste', () => setTimeout(() => {
+    if (!ta.classList.contains('expanded')) {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, COLLAPSED_MAX) + 'px';
+    }
+    updateExpandBtn();
+  }, 0));
+
+  expandBtn.addEventListener('click', () => {
+    const isExpanded = ta.classList.toggle('expanded');
+    expandBtn.textContent = isExpanded ? 'Show less' : 'Read more';
+    if (!isExpanded) {
+      ta.style.height = COLLAPSED_MAX + 'px';
+    } else {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 300) + 'px';
+    }
+  });
+
   ta.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   });
@@ -674,6 +721,9 @@
       ta.disabled = false;
       ta.value = '';
       ta.style.height = 'auto';
+      ta.classList.remove('expanded');
+      expandBtn.style.display = 'none';
+      expandBtn.textContent = 'Read more';
       document.getElementById('send-btn').disabled = false;
       ta.focus();
     }
