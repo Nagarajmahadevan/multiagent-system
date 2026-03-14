@@ -866,11 +866,15 @@
   }
 
   async function signInWithGoogle() {
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
+    if (!supabase) {
+      alert('Auth not initialized. Check SUPABASE_URL and SUPABASE_ANON_KEY env vars.');
+      return;
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
     });
+    if (error) alert('Login error: ' + error.message);
   }
 
   async function signOut() {
