@@ -295,6 +295,8 @@
     }
     #send-btn:hover:not(:disabled) { background:#3b82f6; }
     #send-btn:disabled { opacity:.35; cursor:not-allowed; }
+    #send-btn.stop-mode { background:#dc2626; }
+    #send-btn.stop-mode:hover { background:#ef4444; }
 
     /* scrollbar */
     ::-webkit-scrollbar { width:5px; }
@@ -692,8 +694,8 @@
     <textarea id="user-input" rows="1"
       placeholder="Ask anything — the agents will debate and find the best answer…"></textarea>
     <button id="expand-btn" type="button">Read more</button>
-    <button id="send-btn" onclick="submit()">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    <button id="send-btn" onclick="handleSendBtn()">
+      <svg id="send-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="12" y1="19" x2="12" y2="5"/>
         <polyline points="5 12 12 5 19 12"/>
@@ -1067,8 +1069,35 @@
     }
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────
+  // ── Submit / Stop ─────────────────────────────────────────────────────────
   let running = false;
+  let abortController = null;
+  let currentRunStart = null; // first DOM node added in current run
+
+  const SEND_ICON = `<svg id="send-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="19" x2="12" y2="5"/>
+    <polyline points="5 12 12 5 19 12"/>
+  </svg>`;
+  const STOP_ICON = `<svg id="send-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="4" y="4" width="16" height="16" rx="2"/>
+  </svg>`;
+
+  function handleSendBtn() {
+    if (running) stopRun(); else submit();
+  }
+
+  function stopRun() {
+    if (abortController) abortController.abort();
+  }
+
+  function setSendMode(isRunning) {
+    const btn = document.getElementById('send-btn');
+    btn.innerHTML = isRunning ? STOP_ICON : SEND_ICON;
+    btn.classList.toggle('stop-mode', isRunning);
+    btn.disabled = false;
+    btn.title = isRunning ? 'Stop' : 'Send';
+  }
 
   async function submit() {
     if (running) return;
@@ -1077,7 +1106,7 @@
 
     running = true;
     ta.disabled = true;
-    document.getElementById('send-btn').disabled = true;
+    setSendMode(true);
     currentIdea = idea;
     runId++;
     // Auto-close sidebar on mobile when query starts
@@ -1096,14 +1125,18 @@
       div.className = 'turn-divider';
       div.innerHTML = `<span>Follow-up #${chatHistory.length + 1}</span>`;
       area.appendChild(div);
+      currentRunStart = div;
     }
 
     const qb = document.createElement('div');
     qb.className = 'q-bubble';
     qb.textContent = idea;
     area.appendChild(qb);
+    if (!currentRunStart) currentRunStart = qb;
 
     setStatus('⟳ Starting…', 'running');
+
+    abortController = new AbortController();
 
     try {
       // Get auth token
@@ -1115,6 +1148,7 @@
 
       const res = await fetch('/run', {
         method: 'POST',
+        signal: abortController.signal,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
@@ -1147,16 +1181,42 @@
         }
       }
     } catch (e) {
+      if (e.name === 'AbortError') {
+        // User clicked Stop — remove all nodes added in this run and restore textarea
+        const area = chat();
+        if (currentRunStart && area.contains(currentRunStart)) {
+          let node = currentRunStart;
+          while (node) {
+            const next = node.nextSibling;
+            area.removeChild(node);
+            node = next;
+          }
+        }
+        if (!area.firstChild) buildWelcome();
+        setStatus('● Ready');
+        running = false;
+        ta.disabled = false;
+        setSendMode(false);
+        ta.value = idea;            // restore question so user can edit & retry
+        ta.style.height = 'auto';
+        ta.dispatchEvent(new Event('input'));
+        ta.focus();
+        currentRunStart = null;
+        abortController = null;
+        return;
+      }
       if (e.message !== '__recharge__') setStatus('✕ ' + e.message, 'error');
     } finally {
       running = false;
+      setSendMode(false);
       ta.disabled = false;
       ta.value = '';
       ta.style.height = 'auto';
       ta.classList.remove('expanded');
       expandBtn.style.display = 'none';
       expandBtn.textContent = 'Read more';
-      document.getElementById('send-btn').disabled = false;
+      currentRunStart = null;
+      abortController = null;
       ta.focus();
     }
   }
@@ -1274,7 +1334,7 @@
   function showRechargeModal() {
     running = false;
     ta.disabled = false;
-    document.getElementById('send-btn').disabled = false;
+    setSendMode(false);
     document.getElementById('recharge-overlay').classList.remove('hidden');
   }
 
