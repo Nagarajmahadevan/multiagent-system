@@ -12,10 +12,12 @@ import logging
 import threading
 from pathlib import Path
 
+import os
+
 import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -28,6 +30,15 @@ app = FastAPI(title="Multi-Agent Debate System")
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.get("/config")
+def get_config():
+    """Return public client-side config (safe to expose)."""
+    return JSONResponse({
+        "supabase_url": os.getenv("SUPABASE_URL", ""),
+        "supabase_anon_key": os.getenv("SUPABASE_ANON_KEY", ""),
+    })
 
 
 @app.get("/", response_class=HTMLResponse)

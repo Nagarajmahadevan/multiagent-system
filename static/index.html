@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Multi-Agent Debate System</title>
   <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -295,13 +296,90 @@
     ::-webkit-scrollbar { width:5px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:#3a3a3a; border-radius:3px; }
+
+    /* ── Login overlay ── */
+    #login-overlay {
+      position:fixed; inset:0; z-index:1000;
+      background: var(--bg);
+      display:flex; align-items:center; justify-content:center;
+    }
+    #login-overlay.hidden { display:none; }
+    .login-card {
+      background: var(--sidebar-bg);
+      border: 1px solid #2e2e2e;
+      border-radius: 20px;
+      padding: 48px 40px;
+      text-align: center;
+      max-width: 380px;
+      width: 90%;
+      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    .login-icon { font-size: 48px; margin-bottom: 16px; }
+    .login-card h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .login-card p  { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 32px; }
+    .google-btn {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; padding: 12px 20px;
+      background: #fff; color: #1f1f1f;
+      border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: background .2s, box-shadow .2s;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    .google-btn:hover { background: #f0f0f0; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+    .google-btn svg  { flex-shrink:0; }
+    .login-footer { font-size:11px; color:var(--muted); margin-top:20px; }
+
+    /* ── User info in header ── */
+    .user-area {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .user-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      object-fit: cover; border: 1px solid #3a3a3a;
+    }
+    .user-name { font-size: 12px; color: var(--muted); }
+    .signout-btn {
+      font-size: 11px; padding: 4px 10px;
+      background: transparent; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: var(--muted);
+      cursor: pointer; font-family: inherit;
+      transition: border-color .2s, color .2s;
+    }
+    .signout-btn:hover { border-color: #f87171; color: #f87171; }
   </style>
 </head>
 <body>
 
+<!-- ── Login Overlay ── -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-icon">🧠</div>
+    <h2>Multi-Agent Debate System</h2>
+    <p>10 specialized AI agents explore, debate, and converge on the best answer to any question.</p>
+    <button class="google-btn" onclick="signInWithGoogle()">
+      <svg width="18" height="18" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Continue with Google
+    </button>
+    <div class="login-footer">By signing in, you agree to our terms of service.</div>
+  </div>
+</div>
+
 <header>
   <h1>🧠 Multi-Agent Debate System</h1>
-  <div id="status-pill">● Ready</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div id="status-pill">● Ready</div>
+    <div class="user-area" id="user-area" style="display:none;">
+      <img class="user-avatar" id="user-avatar" src="" alt="avatar" />
+      <span class="user-name" id="user-name"></span>
+      <button class="signout-btn" onclick="signOut()">Sign out</button>
+    </div>
+  </div>
 </header>
 <div id="progress-bar"><div id="progress-fill"></div></div>
 
@@ -731,6 +809,77 @@
 
   // ── Configure marked ──────────────────────────────────────────────────────
   marked.setOptions({ breaks: true, gfm: true });
+
+  // ── Supabase Auth ─────────────────────────────────────────────────────────
+  let supabase = null;
+
+  async function initAuth() {
+    try {
+      const res = await fetch('/config');
+      const cfg = await res.json();
+
+      if (!cfg.supabase_url || !cfg.supabase_anon_key) {
+        // Supabase not configured — skip auth, show app directly
+        document.getElementById('login-overlay').classList.add('hidden');
+        return;
+      }
+
+      supabase = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+
+      // Handle OAuth redirect callback
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        showApp(session.user);
+      } else {
+        // Show login screen
+        document.getElementById('login-overlay').classList.remove('hidden');
+      }
+
+      // Listen for auth state changes
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (session) showApp(session.user);
+        else showLogin();
+      });
+
+    } catch (e) {
+      // If config fetch fails, skip auth
+      document.getElementById('login-overlay').classList.add('hidden');
+    }
+  }
+
+  function showApp(user) {
+    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('user-area').style.display = 'flex';
+    document.getElementById('user-name').textContent = user.user_metadata?.full_name || user.email;
+    const avatar = document.getElementById('user-avatar');
+    if (user.user_metadata?.avatar_url) {
+      avatar.src = user.user_metadata.avatar_url;
+      avatar.style.display = 'block';
+    } else {
+      avatar.style.display = 'none';
+    }
+  }
+
+  function showLogin() {
+    document.getElementById('login-overlay').classList.remove('hidden');
+    document.getElementById('user-area').style.display = 'none';
+  }
+
+  async function signInWithGoogle() {
+    if (!supabase) return;
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    });
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  }
+
+  // Init on page load
+  initAuth();
 </script>
 </body>
 </html>
