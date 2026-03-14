@@ -292,7 +292,7 @@ SYSTEM_PROMPTS = {
 }
 
 
-def build_user_prompt(agent_name: str, user_idea: str, previous_outputs: dict) -> str:
+def build_user_prompt(agent_name: str, user_idea: str, previous_outputs: dict, history: list | None = None) -> str:
     """
     Build the user message for a given agent, including the original idea
     and all outputs from previously completed agents.
@@ -300,8 +300,21 @@ def build_user_prompt(agent_name: str, user_idea: str, previous_outputs: dict) -
     Layer 3+ agents (mediator, architect, validator, summarizer) receive compressed
     context — only the context_distiller's output — instead of all raw debate outputs.
     This prevents context length degradation in the resolution and validation layers.
+
+    history: list of {q, a} dicts from prior conversation turns (a = summarizer output).
     """
-    parts = [f"## Original Question / Idea\n{user_idea}"]
+    parts = []
+
+    # Prepend prior conversation turns so agents have full context
+    if history:
+        hist_lines = []
+        for i, turn in enumerate(history, 1):
+            hist_lines.append(
+                f"### Turn {i}\n**User:** {turn['q']}\n\n**Final Answer (previous):**\n{turn['a']}"
+            )
+        parts.append("## Conversation History (prior turns)\n" + "\n\n".join(hist_lines))
+
+    parts.append(f"## Current Question / Idea\n{user_idea}")
 
     if (
         agent_name in _COMPRESSED_CONTEXT_AGENTS

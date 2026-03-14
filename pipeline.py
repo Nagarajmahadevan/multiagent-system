@@ -100,14 +100,17 @@ class Pipeline:
             except Exception:
                 pass
 
-    def run(self, user_idea: str) -> dict:
+    def run(self, user_idea: str, history: list | None = None) -> dict:
         """
         Execute the full pipeline for a given idea/question.
         Layer 2 (Debate) agents run in parallel; all other layers are sequential.
 
+        history: list of {q, a} dicts from prior conversation turns.
+
         Returns:
             dict with keys: outputs, errors, cost_summary, cost_tracker, elapsed_seconds
         """
+        self._history = history or []
         _banner("DEBATE PIPELINE STARTED")
         _print(f"  Question: {user_idea[:120]}...")
         _print(f"  Agents: {len(AGENT_ORDER)} in pipeline")
@@ -165,7 +168,7 @@ class Pipeline:
             if mode == "sequential":
                 for agent_name in agents_in_group:
                     idx += 1
-                    self._run_single_agent(agent_name, user_idea, idx, total_agents)
+                    self._run_single_agent(agent_name, user_idea, idx, total_agents, self._history)
                     if agent_name in self.errors and not self.continue_on_failure:
                         halted = True
                         break
@@ -191,6 +194,7 @@ class Pipeline:
                             user_idea,
                             agent_idx_map[agent_name],
                             total_agents,
+                            self._history,
                         ): agent_name
                         for agent_name in agents_in_group
                     }
@@ -231,7 +235,8 @@ class Pipeline:
     # ─────────────────────────────────────────────────────────────────────
 
     def _run_single_agent(
-        self, agent_name: str, user_idea: str, idx: int, total_agents: int
+        self, agent_name: str, user_idea: str, idx: int, total_agents: int,
+        history: list | None = None,
     ) -> None:
         """
         Run one agent end-to-end: build prompt → call API → record cost → emit events.
@@ -258,7 +263,7 @@ class Pipeline:
         with self._lock:
             current_outputs = dict(self.outputs)
 
-        user_prompt = build_user_prompt(agent_name, user_idea, current_outputs)
+        user_prompt = build_user_prompt(agent_name, user_idea, current_outputs, history=history)
 
         _step(f"Calling {provider} API ({model})...")
         agent_start = time.time()

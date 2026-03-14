@@ -348,6 +348,34 @@
       transition: border-color .2s, color .2s;
     }
     .signout-btn:hover { border-color: #f87171; color: #f87171; }
+    .newchat-btn {
+      font-size: 11px; padding: 4px 10px;
+      background: transparent; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: var(--muted);
+      cursor: pointer; font-family: inherit;
+      transition: border-color .2s, color .2s;
+    }
+    .newchat-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+    .balance-pill {
+      font-size: 12px; font-weight: 600;
+      padding: 3px 10px; border-radius: 999px;
+      background: rgba(74,222,128,.1); color: #4ade80;
+      border: 1px solid rgba(74,222,128,.25);
+      cursor: pointer;
+    }
+    .balance-pill:hover { background: rgba(74,222,128,.18); }
+    .balance-pill.low { background: rgba(251,191,36,.1); color: #fbbf24; border-color: rgba(251,191,36,.25); }
+    .balance-pill.empty { background: rgba(248,113,113,.1); color: #f87171; border-color: rgba(248,113,113,.25); }
+
+    /* ── Turn divider ── */
+    .turn-divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 32px 0 24px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em; color: #555;
+    }
+    .turn-divider::before, .turn-divider::after {
+      content:''; flex:1; height:1px; background:#2e2e2e;
+    }
 
     /* ── Recharge modal ── */
     #recharge-overlay {
@@ -461,6 +489,8 @@
   <div style="display:flex;align-items:center;gap:12px;">
     <div id="status-pill">● Ready</div>
     <div class="user-area" id="user-area" style="display:none;">
+      <button class="newchat-btn" id="newchat-btn" onclick="newChat()" style="display:none;">+ New Chat</button>
+      <span class="balance-pill" id="balance-pill" title="Your credit balance"></span>
       <img class="user-avatar" id="user-avatar" src="" alt="avatar" />
       <span class="user-name" id="user-name"></span>
       <button class="signout-btn" onclick="signOut()">Sign out</button>
@@ -535,23 +565,6 @@
   <!-- ── Main ── -->
   <main>
     <div id="chat-area">
-      <div id="welcome">
-        <div class="w-icon">🧠</div>
-        <h2>What do you want to solve?</h2>
-        <p>10 specialized AI agents will explore, debate, compress, and converge on the best solution to your question.</p>
-        <div class="agent-tags">
-          <span class="agent-tag">🔮 Visionary</span>
-          <span class="agent-tag">🔬 Researcher</span>
-          <span class="agent-tag">🔍 Critic</span>
-          <span class="agent-tag">🛡️ Defender</span>
-          <span class="agent-tag">😈 Devil's Advocate</span>
-          <span class="agent-tag">🗜️ Context Distiller</span>
-          <span class="agent-tag">⚖️ Mediator</span>
-          <span class="agent-tag">🏗️ Architect</span>
-          <span class="agent-tag">✅ Validator</span>
-          <span class="agent-tag">📋 Summarizer</span>
-        </div>
-      </div>
     </div>
   </main>
 </div>
@@ -595,6 +608,11 @@
   // ── State ─────────────────────────────────────────────────────────────────
   let totalCost = 0, totalIn = 0, totalOut = 0, doneCount = 0;
   let ACTIVE_TOTAL = 10;
+
+  // Conversation history: [{q: "user question", a: "summarizer output"}, ...]
+  let chatHistory = [];
+  let currentIdea = '';
+  let currentSummarizerOutput = '';
 
   // ── Textarea auto-grow + expand toggle ───────────────────────────────────
   const ta = document.getElementById('user-input');
@@ -668,6 +686,7 @@
 
   function reset() {
     totalCost = 0; totalIn = 0; totalOut = 0; doneCount = 0; ACTIVE_TOTAL = 10;
+    currentSummarizerOutput = '';
     document.getElementById('total-cost').textContent = '₹ 0.00';
     document.getElementById('total-tokens').textContent = '0 tokens';
     document.getElementById('progress-fill').style.width = '0%';
@@ -676,6 +695,41 @@
       const row = document.getElementById('row-' + a);
       if (row) row.classList.remove('skipped');
     });
+  }
+
+  function newChat() {
+    if (running) return;
+    chatHistory = [];
+    currentIdea = '';
+    currentSummarizerOutput = '';
+    lastLayer = null;
+    reset();
+    const area = chat();
+    area.innerHTML = '';
+    area.appendChild(buildWelcome());
+    document.getElementById('newchat-btn').style.display = 'none';
+  }
+
+  function buildWelcome() {
+    const w = document.createElement('div');
+    w.id = 'welcome';
+    w.innerHTML = `
+      <div class="w-icon">🧠</div>
+      <h2>What do you want to solve?</h2>
+      <p>10 specialized AI agents will explore, debate, compress, and converge on the best solution to your question.</p>
+      <div class="agent-tags">
+        <span class="agent-tag">🔮 Visionary</span>
+        <span class="agent-tag">🔬 Researcher</span>
+        <span class="agent-tag">🔍 Critic</span>
+        <span class="agent-tag">🛡️ Defender</span>
+        <span class="agent-tag">😈 Devil's Advocate</span>
+        <span class="agent-tag">🗜️ Context Distiller</span>
+        <span class="agent-tag">⚖️ Mediator</span>
+        <span class="agent-tag">🏗️ Architect</span>
+        <span class="agent-tag">✅ Validator</span>
+        <span class="agent-tag">📋 Summarizer</span>
+      </div>`;
+    return w;
   }
 
   function chat() { return document.getElementById('chat-area'); }
@@ -808,6 +862,7 @@
         addCost(ev.cost_inr || 0, ev.input_tokens || 0, ev.output_tokens || 0);
         completeCard(ev.agent, ev.output, ev.input_tokens || 0,
                      ev.output_tokens || 0, ev.cost_inr || 0, ev.elapsed || 0);
+        if (ev.agent === 'summarizer') currentSummarizerOutput = ev.output;
         scrollBottom();
         break;
 
@@ -819,8 +874,14 @@
         break;
 
       case 'pipeline_complete':
-        progress(TOTAL);
+        progress(ACTIVE_TOTAL);
         setStatus(`✓ Done  ₹ ${(ev.total_cost_inr || totalCost).toFixed(4)}  •  ${ev.elapsed}s`);
+        // Save this turn to history
+        if (currentIdea && currentSummarizerOutput) {
+          chatHistory.push({ q: currentIdea, a: currentSummarizerOutput });
+          document.getElementById('newchat-btn').style.display = 'block';
+        }
+        fetchBalance();
         setTimeout(scrollBottom, 400);
         break;
 
@@ -841,12 +902,23 @@
     running = true;
     ta.disabled = true;
     document.getElementById('send-btn').disabled = true;
+    currentIdea = idea;
     reset();
     lastLayer = null;
 
-    // Clear chat, show question bubble
+    // Append turn divider (if follow-up) then question bubble
     const area = chat();
-    area.innerHTML = '';
+    // Remove welcome screen if present
+    const welcome = document.getElementById('welcome');
+    if (welcome) welcome.remove();
+
+    if (chatHistory.length > 0) {
+      const div = document.createElement('div');
+      div.className = 'turn-divider';
+      div.innerHTML = `<span>Follow-up #${chatHistory.length + 1}</span>`;
+      area.appendChild(div);
+    }
+
     const qb = document.createElement('div');
     qb.className = 'q-bubble';
     qb.textContent = idea;
@@ -868,7 +940,7 @@
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ idea }),
+        body: JSON.stringify({ idea, history: chatHistory }),
       });
 
       // No balance — show recharge modal
@@ -953,6 +1025,7 @@
   function showApp(user) {
     document.getElementById('login-overlay').classList.add('hidden');
     document.getElementById('user-area').style.display = 'flex';
+    fetchBalance();
     document.getElementById('user-name').textContent = user.user_metadata?.full_name || user.email;
     const avatar = document.getElementById('user-avatar');
     if (user.user_metadata?.avatar_url) {
@@ -983,6 +1056,28 @@
   async function signOut() {
     if (!sbClient) return;
     await sbClient.auth.signOut();
+  }
+
+  async function fetchBalance() {
+    if (!sbClient) return;
+    try {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session) return;
+      const res = await fetch('/credits', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const pill = document.getElementById('balance-pill');
+      if (!pill) return;
+      const inr = data.balance_inr;
+      pill.textContent = `₹ ${inr.toFixed(2)}`;
+      pill.title = 'Your credit balance — click to recharge';
+      pill.onclick = () => showRechargeModal();
+      pill.classList.remove('low', 'empty');
+      if (inr <= 0) pill.classList.add('empty');
+      else if (inr < 20) pill.classList.add('low');
+    } catch {}
   }
 
   // ── Recharge modal ────────────────────────────────────────────────────────
@@ -1038,7 +1133,8 @@
         name: 'Multi-Agent Debate System',
         description: `Top up ₹${selectedAmount}`,
         order_id: order.order_id,
-        prefill: { email: session?.user?.email || '' },
+        prefill: { email: session?.user?.email || '', contact: '9999999999' },
+        readonly: { contact: true },
         theme: { color: '#2563eb' },
         handler: async (response) => {
           // Verify payment on backend and add credits
@@ -1055,6 +1151,7 @@
           if (verifyRes.ok) {
             document.getElementById('recharge-overlay').classList.add('hidden');
             setStatus('✓ Top up successful! Ready.', '');
+            fetchBalance();
           } else {
             alert('Payment verification failed. Contact support.');
           }
@@ -1076,6 +1173,9 @@
       btn.disabled = false;
     }
   }
+
+  // Render welcome screen
+  chat().appendChild(buildWelcome());
 
   // Init on page load
   initAuth();

@@ -210,6 +210,7 @@ async def run_pipeline(request: Request):
     idea = (body.get("idea") or "").strip()
     if not idea:
         return HTMLResponse('{"error":"No idea provided"}', status_code=400)
+    history = body.get("history") or []
 
     loop = asyncio.get_event_loop()
     event_queue: asyncio.Queue = asyncio.Queue()
@@ -222,7 +223,7 @@ async def run_pipeline(request: Request):
             config = yaml.safe_load(Path("config.yaml").read_text())
             from pipeline import Pipeline
             p = Pipeline(config, on_event=emit)
-            p.run(idea)
+            p.run(idea, history=history)
         except Exception as exc:
             logger.exception("Pipeline error")
             emit({"type": "error", "message": str(exc)})
