@@ -60,7 +60,8 @@ class APIClient:
         if provider == "deepseek":
             return self._call_deepseek(model, system_prompt, user_prompt, max_tokens)
         elif provider == "gemini":
-            return self._call_gemini(model, system_prompt, user_prompt, max_tokens)
+            use_grounding = (agent_name == "researcher")
+            return self._call_gemini(model, system_prompt, user_prompt, max_tokens, use_grounding)
         elif provider == "openai":
             return self._call_openai(model, system_prompt, user_prompt, max_tokens)
         elif provider == "anthropic":
@@ -120,7 +121,8 @@ class APIClient:
     # ─────────────────────────────────────────────────────────────────────
 
     def _call_gemini(
-        self, model: str, system_prompt: str, user_prompt: str, max_tokens: int
+        self, model: str, system_prompt: str, user_prompt: str, max_tokens: int,
+        use_grounding: bool = False,
     ) -> dict:
         api_key = get_api_key("gemini", self.config)
         url = (
@@ -142,6 +144,10 @@ class APIClient:
                 "temperature": 0.7,
             },
         }
+
+        # Enable Google Search grounding for the Researcher agent
+        if use_grounding:
+            payload["tools"] = [{"google_search": {}}]
 
         headers = {"Content-Type": "application/json"}
 

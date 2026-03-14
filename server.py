@@ -1,0 +1,95 @@
+"""
+FastAPI web server for the Multi-Agent Debate System.
+Serves the UI and streams pipeline events via Server-Sent Events (SSE).
+
+Run:  python server.py
+Then open: http://localhost:8000
+"""
+
+import asyncio
+import json
+import logging
+import threading
+from pathlib import Path
+
+import yaml
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
+load_dotenv()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Multi-Agent Debate System")
+
+# Serve static files (CSS, JS assets if any)
+static_dir = Path(__file__).parent / "static"
+static_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    """Serve the main UI."""
+    html_path = static_dir / "index.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.post("/run")
+async def run_pipeline(request: Request):
+    """
+    Accept a JSON body {"idea": "..."} and stream pipeline events as SSE.
+    Each event is a JSON line prefixed with 'data: '.
+    """
+    body = await request.json()
+    idea = (body.get("idea") or "").strip()
+    if not idea:
+        return HTMLResponse('{"error":"No idea provided"}', status_code=400)
+
+    loop = asyncio.get_event_loop()
+    event_queue: asyncio.Queue = asyncio.Queue()
+
+    def emit(event: dict):
+        """Thread-safe emit — called from the pipeline worker thread."""
+        loop.call_soon_threadsafe(event_queue.put_nowait, event)
+
+    def worker():
+        try:
+            config = yaml.safe_load(Path("config.yaml").read_text())
+            from pipeline import Pipeline  # local import keeps worker self-contained
+            p = Pipeline(config, on_event=emit)
+            p.run(idea)
+        except Exception as exc:
+            logger.exception("Pipeline error")
+            emit({"type": "error", "message": str(exc)})
+        finally:
+            emit({"type": "done"})
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+
+    async def generate():
+        while True:
+            event = await event_queue.get()
+            yield f"data: {json.dumps(event)}\n\n"
+            if event.get("type") == "done":
+                break
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+if __name__ == "__main__":
+    import uvicorn
+    print("\n  Multi-Agent Debate System UI")
+    print("  Open: http://localhost:8000\n")
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False)

@@ -1,7 +1,7 @@
 # =============================================================================
 # MULTI-AGENT DEBATE SYSTEM — MASTER CONFIGURATION
 # =============================================================================
-# 9-agent pipeline: Explore → Debate → Resolve → Validate
+# 10-agent pipeline: Explore → Debate → Compress → Resolve → Validate
 # =============================================================================
 
 
@@ -28,7 +28,7 @@ api_base_urls:
 
 
 # =============================================================================
-# MODEL ASSIGNMENTS (9 agents)
+# MODEL ASSIGNMENTS (10 agents)
 # =============================================================================
 
 agents:
@@ -48,12 +48,17 @@ agents:
     provider: "deepseek"
 
   defender:
-    model: "deepseek-chat"
-    provider: "deepseek"
+    model: "gpt-4o-mini"
+    provider: "openai"
 
   devils_advocate:
     model: "gemini-2.5-flash"
     provider: "gemini"
+
+  # --- LAYER 2.5: COMPRESSION ---
+  context_distiller:
+    model: "deepseek-chat"
+    provider: "deepseek"
 
   # --- LAYER 3: RESOLUTION ---
   mediator:
@@ -66,8 +71,8 @@ agents:
 
   # --- LAYER 4: VALIDATION ---
   validator:
-    model: "deepseek-chat"
-    provider: "deepseek"
+    model: "gpt-4o"
+    provider: "openai"
 
   summarizer:
     model: "deepseek-chat"
@@ -84,9 +89,10 @@ token_limits:
   critic: 1500
   defender: 1500
   devils_advocate: 2000
+  context_distiller: 1500
   mediator: 1500
   architect: 2000
-  validator: 1500
+  validator: 2000
   summarizer: 3000
 
 
@@ -110,6 +116,10 @@ pricing:
   gpt-4o-mini:
     input_per_million: 21
     output_per_million: 168
+
+  gpt-4o:
+    input_per_million: 208
+    output_per_million: 835
 
   claude-sonnet-4-6:
     input_per_million: 253

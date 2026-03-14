@@ -1,8 +1,11 @@
 """
-Pipeline orchestration — runs all agents in sequential order.
+Pipeline orchestration — runs all agents in sequential order,
+with Layer 2 (Debate) executing in parallel for speed.
 Debate-and-solve pipeline: agents explore, debate, and converge on the best solution.
 """
 
+import concurrent.futures
+import threading
 import time
 import logging
 from datetime import datetime
@@ -16,6 +19,7 @@ from agents import (
 )
 from api_client import APIClient
 from cost_tracker import CostTracker
+from router import classify, get_active_agents
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +56,22 @@ def _warn(msg: str):
     _print(f"  [WARN] {msg}")
 
 
+# Execution groups: (mode, [agent_names])
+# 'sequential' = one after another
+# 'parallel'   = all run at the same time
+_EXECUTION_GROUPS = [
+    ("sequential", ["visionary", "researcher"]),
+    ("sequential", ["critic", "defender", "devils_advocate"]),
+    ("sequential", ["context_distiller"]),
+    ("sequential", ["mediator", "architect"]),
+    ("sequential", ["validator", "summarizer"]),
+]
+
+
 class Pipeline:
     """Runs the full agent debate pipeline."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, on_event=None):
         self.config = config
         self.client = APIClient(config)
         self.cost_tracker = CostTracker(config["pricing"])
@@ -65,14 +81,29 @@ class Pipeline:
         self.retry_delay = self.pipeline_cfg.get("retry_delay_seconds", 5)
         self.continue_on_failure = self.pipeline_cfg.get("continue_on_failure", True)
 
+        # Optional event callback for real-time UI streaming
+        self._on_event = on_event
+
+        # Thread safety for parallel debate agents
+        self._lock = threading.Lock()
+
         # Stores the output of each completed agent
         self.outputs: dict[str, str] = {}
         # Stores any errors that occurred
         self.errors: dict[str, str] = {}
 
+    def _emit(self, event: dict):
+        """Fire an event to the optional callback (used by the web UI)."""
+        if self._on_event:
+            try:
+                self._on_event(event)
+            except Exception:
+                pass
+
     def run(self, user_idea: str) -> dict:
         """
         Execute the full pipeline for a given idea/question.
+        Layer 2 (Debate) agents run in parallel; all other layers are sequential.
 
         Returns:
             dict with keys: outputs, errors, cost_summary, cost_tracker, elapsed_seconds
@@ -92,59 +123,83 @@ class Pipeline:
             _print(f"    - {AGENT_DISPLAY_NAMES[agent_name]}")
 
         start_time = time.time()
-        total_agents = len(AGENT_ORDER)
 
-        for idx, agent_name in enumerate(AGENT_ORDER, 1):
-            display = AGENT_DISPLAY_NAMES[agent_name]
-            layer = AGENT_LAYERS[agent_name]
-            agent_cfg = self.config["agents"][agent_name]
-            model = agent_cfg["model"]
-            provider = agent_cfg["provider"]
-            token_limit = self.config["token_limits"].get(agent_name, 500)
+        # ── Complexity routing ────────────────────────────────────────────
+        _step("Classifying query complexity...")
+        complexity = classify(user_idea, self.config)
+        active_agents = get_active_agents(complexity)  # None = full pipeline
+        active_set = set(active_agents) if active_agents else set(AGENT_ORDER)
+        total_agents = len(active_set)
 
-            _print()
-            _print(f"{'─' * 60}")
-            _print(f"  [{idx}/{total_agents}] {display}")
-            _print(f"  Layer:    {layer}")
-            _print(f"  Model:    {model} ({provider})")
-            _print(f"  Tokens:   max {token_limit} output tokens")
-            _print(f"{'─' * 60}")
+        _print(f"  Complexity:  {complexity.upper()} — {total_agents} agents will run")
+        if active_agents:
+            _print(f"  Agents:      {', '.join(active_agents)}")
+            skipped = [a for a in AGENT_ORDER if a not in active_set]
+            _print(f"  Skipped:     {', '.join(skipped)}")
 
-            # Run the agent
-            system_prompt = SYSTEM_PROMPTS[agent_name]
-            user_prompt = build_user_prompt(agent_name, user_idea, self.outputs)
+        self._emit({
+            "type": "route",
+            "complexity": complexity,
+            "active_agents": active_agents or list(AGENT_ORDER),
+            "skipped_agents": [a for a in AGENT_ORDER if a not in active_set],
+        })
 
-            _step(f"Calling {provider} API ({model})...")
-            agent_start = time.time()
+        self._emit({"type": "pipeline_start", "question": user_idea, "total_agents": total_agents})
 
-            result = self._call_with_retries(
-                agent_name, system_prompt, user_prompt, token_limit
-            )
+        idx = 0
+        halted = False
 
-            agent_elapsed = time.time() - agent_start
+        for mode, agents_in_group in _EXECUTION_GROUPS:
+            if halted:
+                break
 
-            if result is not None:
-                self.outputs[agent_name] = result["content"]
-                self.cost_tracker.record(
-                    agent_name=agent_name,
-                    model=result["model"],
-                    input_tokens=result["input_tokens"],
-                    output_tokens=result["output_tokens"],
-                )
-                _ok(
-                    f"{display} completed in {agent_elapsed:.1f}s "
-                    f"({result['input_tokens']} in / {result['output_tokens']} out tokens)"
-                )
-                # Show a preview of the output
-                preview = result["content"][:150].replace("\n", " ").strip()
-                _print(f"  Preview: {preview}...")
-            else:
-                self.outputs[agent_name] = ""
-                _fail(f"{display} FAILED after {agent_elapsed:.1f}s")
+            # Filter to active agents only
+            agents_in_group = [a for a in agents_in_group if a in active_set]
+            if not agents_in_group:
+                continue
 
-                if not self.continue_on_failure:
-                    _fail("Pipeline halted due to agent failure.")
-                    break
+            # Emit layer_start for this group
+            layer_name = AGENT_LAYERS[agents_in_group[0]]
+            self._emit({"type": "layer_start", "layer": layer_name})
+
+            if mode == "sequential":
+                for agent_name in agents_in_group:
+                    idx += 1
+                    self._run_single_agent(agent_name, user_idea, idx, total_agents)
+                    if agent_name in self.errors and not self.continue_on_failure:
+                        halted = True
+                        break
+
+            else:  # parallel
+                _print()
+                _print(f"  [PARALLEL] Running {len(agents_in_group)} agents simultaneously:")
+                for a in agents_in_group:
+                    _print(f"    - {AGENT_DISPLAY_NAMES[a]}")
+
+                agent_idx_map = {}
+                for agent_name in agents_in_group:
+                    idx += 1
+                    agent_idx_map[agent_name] = idx
+
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=len(agents_in_group)
+                ) as executor:
+                    future_to_agent = {
+                        executor.submit(
+                            self._run_single_agent,
+                            agent_name,
+                            user_idea,
+                            agent_idx_map[agent_name],
+                            total_agents,
+                        ): agent_name
+                        for agent_name in agents_in_group
+                    }
+                    for future in concurrent.futures.as_completed(future_to_agent):
+                        agent_name = future_to_agent[future]
+                        try:
+                            future.result()
+                        except Exception as exc:
+                            logger.error(f"Parallel agent {agent_name} raised: {exc}")
 
         elapsed = time.time() - start_time
 
@@ -155,6 +210,14 @@ class Pipeline:
         if self.errors:
             _print(f"  Errors:      {len(self.errors)} agent(s) had issues")
 
+        self._emit({
+            "type": "pipeline_complete",
+            "total_cost_inr": self.cost_tracker.total_cost_inr,
+            "total_input_tokens": self.cost_tracker.total_input_tokens,
+            "total_output_tokens": self.cost_tracker.total_output_tokens,
+            "elapsed": round(elapsed, 2),
+        })
+
         return {
             "outputs": self.outputs,
             "errors": self.errors,
@@ -162,6 +225,96 @@ class Pipeline:
             "cost_tracker": self.cost_tracker,
             "elapsed_seconds": elapsed,
         }
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Single agent execution (used by both sequential and parallel paths)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _run_single_agent(
+        self, agent_name: str, user_idea: str, idx: int, total_agents: int
+    ) -> None:
+        """
+        Run one agent end-to-end: build prompt → call API → record cost → emit events.
+        Thread-safe: can be called concurrently from parallel debate group.
+        """
+        display = AGENT_DISPLAY_NAMES[agent_name]
+        layer = AGENT_LAYERS[agent_name]
+        agent_cfg = self.config["agents"][agent_name]
+        model = agent_cfg["model"]
+        provider = agent_cfg["provider"]
+        token_limit = self.config["token_limits"].get(agent_name, 500)
+
+        _print()
+        _print(f"{'─' * 60}")
+        _print(f"  [{idx}/{total_agents}] {display}")
+        _print(f"  Layer:    {layer}")
+        _print(f"  Model:    {model} ({provider})")
+        _print(f"  Tokens:   max {token_limit} output tokens")
+        _print(f"{'─' * 60}")
+
+        system_prompt = SYSTEM_PROMPTS[agent_name]
+
+        # Snapshot current outputs at call time (thread-safe read)
+        with self._lock:
+            current_outputs = dict(self.outputs)
+
+        user_prompt = build_user_prompt(agent_name, user_idea, current_outputs)
+
+        _step(f"Calling {provider} API ({model})...")
+        agent_start = time.time()
+
+        self._emit({
+            "type": "agent_start",
+            "agent": agent_name,
+            "display": display,
+            "layer": layer,
+            "model": model,
+            "provider": provider,
+            "index": idx,
+            "total": total_agents,
+        })
+
+        result = self._call_with_retries(agent_name, system_prompt, user_prompt, token_limit)
+        agent_elapsed = time.time() - agent_start
+
+        if result is not None:
+            with self._lock:
+                self.outputs[agent_name] = result["content"]
+                cost_record = self.cost_tracker.record(
+                    agent_name=agent_name,
+                    model=result["model"],
+                    input_tokens=result["input_tokens"],
+                    output_tokens=result["output_tokens"],
+                )
+            _ok(
+                f"{display} completed in {agent_elapsed:.1f}s "
+                f"({result['input_tokens']} in / {result['output_tokens']} out tokens)"
+            )
+            preview = result["content"][:150].replace("\n", " ").strip()
+            _print(f"  Preview: {preview}...")
+            self._emit({
+                "type": "agent_complete",
+                "agent": agent_name,
+                "display": display,
+                "layer": layer,
+                "output": result["content"],
+                "input_tokens": result["input_tokens"],
+                "output_tokens": result["output_tokens"],
+                "cost_inr": cost_record.total_cost_inr,
+                "elapsed": round(agent_elapsed, 2),
+                "model": result["model"],
+                "provider": provider,
+            })
+        else:
+            with self._lock:
+                self.outputs[agent_name] = ""
+            _fail(f"{display} FAILED after {agent_elapsed:.1f}s")
+            self._emit({
+                "type": "agent_error",
+                "agent": agent_name,
+                "display": display,
+                "error": self.errors.get(agent_name, "Unknown error"),
+            })
 
     # ─────────────────────────────────────────────────────────────────────
     # API call with retries
@@ -197,7 +350,8 @@ class Pipeline:
                     f"failed: {type(e).__name__}: {e}"
                 )
                 _warn(f"Attempt {attempt}/{self.max_retries} failed: {type(e).__name__}: {e}")
-                self.errors[agent_name] = error_msg
+                with self._lock:
+                    self.errors[agent_name] = error_msg
 
                 if attempt < self.max_retries:
                     _step(f"Retrying in {self.retry_delay}s...")
