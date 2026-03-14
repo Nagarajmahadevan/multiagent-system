@@ -811,7 +811,7 @@
   marked.setOptions({ breaks: true, gfm: true });
 
   // ── Supabase Auth ─────────────────────────────────────────────────────────
-  let supabase = null;
+  let sbClient = null;
 
   async function initAuth() {
     try {
@@ -824,10 +824,10 @@
         return;
       }
 
-      supabase = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+      sbClient = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
 
       // Handle OAuth redirect callback
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await sbClient.auth.getSession();
       if (session) {
         showApp(session.user);
       } else {
@@ -836,7 +836,7 @@
       }
 
       // Listen for auth state changes
-      supabase.auth.onAuthStateChange((_event, session) => {
+      sbClient.auth.onAuthStateChange((_event, session) => {
         if (session) showApp(session.user);
         else showLogin();
       });
@@ -866,11 +866,11 @@
   }
 
   async function signInWithGoogle() {
-    if (!supabase) {
+    if (!sbClient) {
       alert('Auth not initialized. Check SUPABASE_URL and SUPABASE_ANON_KEY env vars.');
       return;
     }
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await sbClient.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
     });
@@ -878,8 +878,8 @@
   }
 
   async function signOut() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    if (!sbClient) return;
+    await sbClient.auth.signOut();
   }
 
   // Init on page load
