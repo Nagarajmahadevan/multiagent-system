@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Multi-Agent Debate System</title>
   <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -29,6 +29,7 @@
       background: var(--bg);
       color: var(--text);
       height: 100vh;
+      height: 100dvh; /* dynamic viewport height — accounts for Android nav bar */
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -261,6 +262,8 @@
     #input-area {
       padding:14px 20px 18px; border-top:1px solid #2e2e2e;
       background:var(--bg); flex-shrink:0;
+      /* Push above Android nav bar / iPhone home indicator */
+      padding-bottom: max(18px, env(safe-area-inset-bottom));
     }
     .input-wrap {
       display:flex; align-items:flex-end; gap:10px;
@@ -511,7 +514,7 @@
       #chat-area { padding: 16px 12px 10px; }
 
       /* Input area */
-      #input-area { padding: 10px 12px 14px; }
+      #input-area { padding: 10px 12px max(14px, env(safe-area-inset-bottom)); }
 
       /* Question bubble full width on mobile */
       .q-bubble { max-width: 95%; }
