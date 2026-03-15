@@ -726,6 +726,50 @@
       .recharge-card { max-height: 88dvh; border-radius: 16px; width: 90%; max-width: 420px; }
       #recharge-overlay { align-items: center; }
     }
+
+    /* ── RTL support (Arabic, Hebrew, etc.) ── */
+    [dir="rtl"] aside { border-right: none; border-left: 1px solid #2e2e2e; }
+    [dir="rtl"] .a-header { flex-direction: row-reverse; }
+    [dir="rtl"] .a-footer { flex-direction: row-reverse; }
+    [dir="rtl"] #input-area .input-wrap { flex-direction: row-reverse; }
+    [dir="rtl"] .conv-item { flex-direction: row-reverse; }
+    [dir="rtl"] .user-area { flex-direction: row-reverse; }
+    [dir="rtl"] .sidebar-cost { text-align: right; }
+
+    /* ── GDPR / Cookie consent banner ── */
+    #gdpr-banner {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 2000;
+      background: #1a1a1a; border-top: 1px solid #2e2e2e;
+      padding: 14px 20px; display: flex; align-items: center;
+      gap: 14px; flex-wrap: wrap;
+      font-size: 12px; color: var(--muted);
+      box-shadow: 0 -4px 20px rgba(0,0,0,.4);
+    }
+    #gdpr-banner.hidden { display: none; }
+    #gdpr-banner p { flex: 1; min-width: 200px; line-height: 1.5; }
+    #gdpr-banner a { color: #60a5fa; text-decoration: underline; cursor: pointer; }
+    .gdpr-btn {
+      padding: 7px 16px; border-radius: 8px; border: none;
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      cursor: pointer; white-space: nowrap;
+    }
+    .gdpr-accept { background: #2563eb; color: #fff; }
+    .gdpr-accept:hover { background: #3b82f6; }
+    .gdpr-decline { background: transparent; color: var(--muted); border: 1px solid #3a3a3a; }
+    .gdpr-decline:hover { color: var(--text); border-color: #555; }
+
+    /* ── Delete account link (inside recharge modal footer) ── */
+    .delete-account-link {
+      display: block; text-align: center; margin-top: 18px;
+      font-size: 11px; color: #f87171; cursor: pointer; opacity: 0.7;
+    }
+    .delete-account-link:hover { opacity: 1; text-decoration: underline; }
+
+    /* ── Stripe payment note ── */
+    .payment-note {
+      font-size: 11px; color: var(--muted); text-align: center;
+      margin-top: 10px; line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -735,7 +779,7 @@
   <div class="login-card">
     <div class="login-icon">⚖️</div>
     <h2>Verd</h2>
-    <p>10 specialized AI agents explore, debate, and converge on the best answer to any question.</p>
+    <p data-i18n="loginSubtitle">10 specialized AI agents explore, debate, and converge on the best answer to any question.</p>
     <button class="google-btn" id="google-btn" onclick="signInWithGoogle()">
       <svg width="18" height="18" viewBox="0 0 48 48">
         <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -743,9 +787,9 @@
         <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
         <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
       </svg>
-      Continue with Google
+      <span data-i18n="signIn">Continue with Google</span>
     </button>
-    <div class="login-footer">By signing in, you agree to our terms of service.</div>
+    <div class="login-footer" data-i18n="loginFooter">By signing in, you agree to our <a href="#" onclick="showPrivacyPolicy()">Privacy Policy</a> and terms of service.</div>
   </div>
 </div>
 
@@ -754,30 +798,43 @@
   <div class="recharge-card">
     <button onclick="document.getElementById('recharge-overlay').classList.add('hidden')" style="position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;">×</button>
     <div class="recharge-icon">⚡</div>
-    <h2>Top up to continue</h2>
-    <p>You've used your free query. Add balance to keep exploring with 10 AI agents.</p>
-    <div class="pack-grid">
-      <button class="pack-btn" onclick="selectPack(10, this)">
-        <div class="pack-amount">₹10</div>
-        <div class="pack-label">Starter</div>
-      </button>
-      <button class="pack-btn" onclick="selectPack(500, this)">
-        <div class="pack-amount">₹500</div>
-        <div class="pack-label">Popular</div>
-      </button>
-      <button class="pack-btn" onclick="selectPack(1000, this)">
-        <div class="pack-amount">₹1000</div>
-        <div class="pack-label">Best value</div>
-      </button>
-    </div>
+    <h2 data-i18n="topUpTitle">Top up to continue</h2>
+    <p data-i18n="topUpDesc">Add balance to keep exploring with 10 AI agents.</p>
+    <!-- Pack buttons rendered dynamically by setupRechargeModal() -->
+    <div class="pack-grid" id="pack-grid"></div>
     <div class="custom-input-wrap">
-      <span>₹</span>
-      <input id="custom-amount" type="number" min="10" placeholder="Enter amount (min ₹10)"
-        oninput="onCustomAmount()" />
+      <span id="currency-symbol">₹</span>
+      <input id="custom-amount" type="number" min="1"
+        placeholder="Custom amount" oninput="onCustomAmount()" />
     </div>
     <button class="pay-btn" id="pay-btn" onclick="startPayment()" disabled>
-      Pay & Continue
+      <span data-i18n="payBtn">Pay & Continue</span>
     </button>
+    <div class="payment-note" id="payment-note"></div>
+    <span class="delete-account-link" onclick="deleteAccount()" data-i18n="deleteAccount">Delete my account & data</span>
+  </div>
+</div>
+
+<!-- ── GDPR Cookie Consent Banner ── -->
+<div id="gdpr-banner" class="hidden">
+  <p data-i18n="gdprText">We use cookies and store your conversation data to provide the service. By using Verd, you agree to our <a onclick="showPrivacyPolicy()">Privacy Policy</a>.</p>
+  <button class="gdpr-btn gdpr-accept" onclick="acceptGdpr()" data-i18n="gdprAccept">Accept</button>
+  <button class="gdpr-btn gdpr-decline" onclick="declineGdpr()" data-i18n="gdprDecline">Decline</button>
+</div>
+
+<!-- ── Privacy Policy Modal ── -->
+<div id="privacy-overlay" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.8);align-items:center;justify-content:center;">
+  <div style="background:#1a1a1a;border:1px solid #2e2e2e;border-radius:16px;padding:28px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto;position:relative;">
+    <button onclick="document.getElementById('privacy-overlay').style.display='none'" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">×</button>
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Privacy Policy</h2>
+    <div style="font-size:13px;color:var(--muted);line-height:1.8;">
+      <p><strong style="color:var(--text)">What we collect:</strong> Email address, conversation history, and usage data (tokens used, cost per query).</p>
+      <p style="margin-top:10px"><strong style="color:var(--text)">How we use it:</strong> To provide the AI debate service, manage your credit balance, and improve the product. We do not sell your data.</p>
+      <p style="margin-top:10px"><strong style="color:var(--text)">Third parties:</strong> Google (authentication), Supabase (database), Razorpay/Stripe (payments), AI providers (DeepSeek, Google Gemini, OpenAI, Anthropic) for query processing.</p>
+      <p style="margin-top:10px"><strong style="color:var(--text)">Your rights:</strong> You can delete your account and all associated data at any time using the "Delete my account" option in the recharge screen.</p>
+      <p style="margin-top:10px"><strong style="color:var(--text)">Data retention:</strong> Your data is retained while your account is active. Deleted upon account removal.</p>
+      <p style="margin-top:10px"><strong style="color:var(--text)">Contact:</strong> For data requests, email support@getverd.com</p>
+    </div>
   </div>
 </div>
 
@@ -794,11 +851,11 @@
   <div style="display:flex;align-items:center;gap:12px;">
     <div id="status-pill">● Ready</div>
     <div class="user-area" id="user-area" style="display:none;">
-      <button class="newchat-btn" id="newchat-btn" onclick="newChat()" style="display:none;">+ New Chat</button>
+      <button class="newchat-btn" id="newchat-btn" onclick="newChat()" style="display:none;" data-i18n="newChat">+ New Chat</button>
       <span class="balance-pill" id="balance-pill" title="Your credit balance"></span>
       <img class="user-avatar" id="user-avatar" src="" alt="avatar" />
       <span class="user-name" id="user-name"></span>
-      <button class="signout-btn" onclick="signOut()">Sign out</button>
+      <button class="signout-btn" onclick="signOut()" data-i18n="signOut">Sign out</button>
     </div>
   </div>
 </header>
@@ -810,13 +867,13 @@
   <aside id="sidebar">
     <!-- Conversation history -->
     <div class="conv-section">
-      <div class="sidebar-title">History</div>
+      <div class="sidebar-title" data-i18n="history">History</div>
       <div class="conv-list" id="conv-list">
-        <div class="conv-list-empty">No conversations yet</div>
+        <div class="conv-list-empty" data-i18n="noConversations">No conversations yet</div>
       </div>
     </div>
 
-    <div class="sidebar-title">Pipeline</div>
+    <div class="sidebar-title" data-i18n="pipeline">Pipeline</div>
 
     <div class="layer-group">
       <div class="layer-label" style="color:var(--l1)">Layer 1 — Exploration</div>
@@ -869,7 +926,7 @@
     </div>
 
     <div class="sidebar-cost">
-      <div class="cost-label">Session Cost</div>
+      <div class="cost-label" data-i18n="sessionCost">Session Cost</div>
       <div class="cost-value" id="total-cost">₹ 0.00</div>
       <div class="cost-tokens" id="total-tokens">0 tokens</div>
     </div>
@@ -886,6 +943,7 @@
 <div id="input-area">
   <div class="input-wrap">
     <textarea id="user-input" rows="1"
+      data-i18n-placeholder="placeholder"
       placeholder="Ask anything — the agents will debate and find the best answer…"></textarea>
     <button id="expand-btn" type="button">Read more</button>
     <button id="send-btn" onclick="handleSendBtn()">
@@ -933,6 +991,309 @@
   // Supabase conversation persistence
   let currentConvId = null;   // UUID of the active conversation row
   let allConversations = [];  // [{id, title, turns, updated_at}] — loaded on login
+
+  // ── i18n — Translations ───────────────────────────────────────────────────
+  const TRANSLATIONS = {
+    en: {
+      placeholder: "Ask anything — the agents will debate and find the best answer…",
+      newChat: "+ New Chat", signIn: "Continue with Google", signOut: "Sign out",
+      loginSubtitle: "10 specialized AI agents explore, debate, and converge on the best answer to any question.",
+      loginFooter: "By signing in, you agree to our Privacy Policy and terms of service.",
+      topUpTitle: "Top up to continue", topUpDesc: "Add balance to keep exploring with 10 AI agents.",
+      payBtn: "Pay & Continue", sessionCost: "Session Cost", history: "History",
+      pipeline: "Pipeline", noConversations: "No conversations yet",
+      starter: "Starter", popular: "Popular", bestValue: "Best value",
+      gdprText: "We use cookies and store your data to provide the service. See our Privacy Policy.",
+      gdprAccept: "Accept", gdprDecline: "Decline",
+      deleteAccount: "Delete my account & data",
+      paymentNote: "Secured by Razorpay. Cards from all countries accepted.",
+    },
+    es: {
+      placeholder: "Pregunta lo que quieras — los agentes debatirán y encontrarán la mejor respuesta…",
+      newChat: "+ Nueva conversación", signIn: "Continuar con Google", signOut: "Cerrar sesión",
+      loginSubtitle: "10 agentes de IA especializados exploran, debaten y convergen en la mejor respuesta.",
+      loginFooter: "Al iniciar sesión, aceptas nuestra Política de Privacidad y los términos de servicio.",
+      topUpTitle: "Recargar para continuar", topUpDesc: "Añade saldo para seguir explorando con 10 agentes de IA.",
+      payBtn: "Pagar y continuar", sessionCost: "Coste de sesión", history: "Historial",
+      pipeline: "Pipeline", noConversations: "Sin conversaciones aún",
+      starter: "Básico", popular: "Popular", bestValue: "Mejor valor",
+      gdprText: "Usamos cookies y almacenamos tus datos para prestar el servicio. Consulta nuestra Política de Privacidad.",
+      gdprAccept: "Aceptar", gdprDecline: "Rechazar",
+      deleteAccount: "Eliminar mi cuenta y datos",
+      paymentNote: "Protegido por Razorpay. Se aceptan tarjetas de todos los países.",
+    },
+    fr: {
+      placeholder: "Posez n'importe quelle question — les agents débattront et trouveront la meilleure réponse…",
+      newChat: "+ Nouveau chat", signIn: "Continuer avec Google", signOut: "Se déconnecter",
+      loginSubtitle: "10 agents IA spécialisés explorent, débattent et convergent vers la meilleure réponse.",
+      loginFooter: "En vous connectant, vous acceptez notre Politique de confidentialité et les conditions d'utilisation.",
+      topUpTitle: "Recharger pour continuer", topUpDesc: "Ajoutez du crédit pour continuer avec 10 agents IA.",
+      payBtn: "Payer et continuer", sessionCost: "Coût de session", history: "Historique",
+      pipeline: "Pipeline", noConversations: "Aucune conversation",
+      starter: "Débutant", popular: "Populaire", bestValue: "Meilleure offre",
+      gdprText: "Nous utilisons des cookies et stockons vos données pour fournir le service. Voir notre Politique de confidentialité.",
+      gdprAccept: "Accepter", gdprDecline: "Refuser",
+      deleteAccount: "Supprimer mon compte et mes données",
+      paymentNote: "Sécurisé par Razorpay. Cartes de tous pays acceptées.",
+    },
+    de: {
+      placeholder: "Stell eine beliebige Frage — die Agenten debattieren und finden die beste Antwort…",
+      newChat: "+ Neuer Chat", signIn: "Mit Google fortfahren", signOut: "Abmelden",
+      loginSubtitle: "10 spezialisierte KI-Agenten erkunden, debattieren und kommen zur besten Antwort.",
+      loginFooter: "Mit der Anmeldung stimmst du unserer Datenschutzrichtlinie und den Nutzungsbedingungen zu.",
+      topUpTitle: "Aufladen um fortzufahren", topUpDesc: "Guthaben hinzufügen, um mit 10 KI-Agenten weiterzuarbeiten.",
+      payBtn: "Zahlen & weiter", sessionCost: "Sitzungskosten", history: "Verlauf",
+      pipeline: "Pipeline", noConversations: "Keine Gespräche",
+      starter: "Einsteiger", popular: "Beliebt", bestValue: "Bestes Angebot",
+      gdprText: "Wir verwenden Cookies und speichern deine Daten zur Bereitstellung des Dienstes. Siehe unsere Datenschutzrichtlinie.",
+      gdprAccept: "Akzeptieren", gdprDecline: "Ablehnen",
+      deleteAccount: "Konto und Daten löschen",
+      paymentNote: "Gesichert durch Razorpay. Karten aus allen Ländern akzeptiert.",
+    },
+    ar: {
+      placeholder: "اسأل أي شيء — سيتناقش الوكلاء ويجدون أفضل إجابة…",
+      newChat: "+ محادثة جديدة", signIn: "المتابعة مع Google", signOut: "تسجيل الخروج",
+      loginSubtitle: "10 وكلاء ذكاء اصطناعي متخصصون يستكشفون ويتناقشون ويتوصلون إلى أفضل إجابة.",
+      loginFooter: "بتسجيل الدخول، توافق على سياسة الخصوصية وشروط الخدمة.",
+      topUpTitle: "أعد الشحن للمتابعة", topUpDesc: "أضف رصيداً للاستمرار مع 10 وكلاء ذكاء اصطناعي.",
+      payBtn: "ادفع وتابع", sessionCost: "تكلفة الجلسة", history: "السجل",
+      pipeline: "خط الأنابيب", noConversations: "لا توجد محادثات بعد",
+      starter: "أساسي", popular: "شائع", bestValue: "أفضل قيمة",
+      gdprText: "نستخدم ملفات تعريف الارتباط ونخزن بياناتك لتقديم الخدمة. انظر سياسة الخصوصية.",
+      gdprAccept: "قبول", gdprDecline: "رفض",
+      deleteAccount: "حذف حسابي وبياناتي",
+      paymentNote: "مؤمّن بواسطة Razorpay. بطاقات من جميع الدول مقبولة.",
+    },
+    hi: {
+      placeholder: "कुछ भी पूछें — एजेंट बहस करेंगे और सर्वोत्तम उत्तर खोजेंगे…",
+      newChat: "+ नई चैट", signIn: "Google से जारी रखें", signOut: "साइन आउट",
+      loginSubtitle: "10 विशेष AI एजेंट किसी भी सवाल का सबसे अच्छा जवाब खोजने के लिए बहस करते हैं।",
+      loginFooter: "साइन इन करके, आप हमारी गोपनीयता नीति और सेवा की शर्तों से सहमत होते हैं।",
+      topUpTitle: "जारी रखने के लिए टॉप अप करें", topUpDesc: "10 AI एजेंटों के साथ एक्सप्लोर करना जारी रखने के लिए बैलेंस जोड़ें।",
+      payBtn: "भुगतान करें और जारी रखें", sessionCost: "सत्र लागत", history: "इतिहास",
+      pipeline: "पाइपलाइन", noConversations: "अभी तक कोई बातचीत नहीं",
+      starter: "स्टार्टर", popular: "लोकप्रिय", bestValue: "सर्वोत्तम मूल्य",
+      gdprText: "हम सेवा प्रदान करने के लिए कुकीज़ का उपयोग करते हैं और आपका डेटा संग्रहीत करते हैं।",
+      gdprAccept: "स्वीकार करें", gdprDecline: "अस्वीकार करें",
+      deleteAccount: "मेरा खाता और डेटा हटाएं",
+      paymentNote: "Razorpay द्वारा सुरक्षित। सभी देशों के कार्ड स्वीकार।",
+    },
+    zh: {
+      placeholder: "问任何问题 — AI 代理将辩论并找到最佳答案…",
+      newChat: "+ 新对话", signIn: "使用 Google 继续", signOut: "退出登录",
+      loginSubtitle: "10 个专业 AI 代理探索、辩论并收敛至最佳答案。",
+      loginFooter: "登录即表示您同意我们的隐私政策和服务条款。",
+      topUpTitle: "充值以继续", topUpDesc: "添加余额，继续使用 10 个 AI 代理。",
+      payBtn: "付款并继续", sessionCost: "本次费用", history: "历史记录",
+      pipeline: "流水线", noConversations: "暂无对话",
+      starter: "基础", popular: "热门", bestValue: "最佳性价比",
+      gdprText: "我们使用 Cookie 并存储您的数据以提供服务。请参阅我们的隐私政策。",
+      gdprAccept: "接受", gdprDecline: "拒绝",
+      deleteAccount: "删除我的账户和数据",
+      paymentNote: "由 Razorpay 保障安全。接受全球各国卡片。",
+    },
+    pt: {
+      placeholder: "Pergunte qualquer coisa — os agentes debaterão e encontrarão a melhor resposta…",
+      newChat: "+ Novo chat", signIn: "Continuar com Google", signOut: "Sair",
+      loginSubtitle: "10 agentes de IA especializados exploram, debatem e convergem para a melhor resposta.",
+      loginFooter: "Ao entrar, você concorda com nossa Política de Privacidade e termos de serviço.",
+      topUpTitle: "Recarregar para continuar", topUpDesc: "Adicione saldo para continuar explorando com 10 agentes de IA.",
+      payBtn: "Pagar e continuar", sessionCost: "Custo da sessão", history: "Histórico",
+      pipeline: "Pipeline", noConversations: "Sem conversas ainda",
+      starter: "Básico", popular: "Popular", bestValue: "Melhor custo-benefício",
+      gdprText: "Usamos cookies e armazenamos seus dados para fornecer o serviço. Veja nossa Política de Privacidade.",
+      gdprAccept: "Aceitar", gdprDecline: "Recusar",
+      deleteAccount: "Excluir minha conta e dados",
+      paymentNote: "Protegido pelo Razorpay. Cartões de todos os países aceitos.",
+    },
+    ja: {
+      placeholder: "何でも聞いてください — AIエージェントが議論して最良の回答を見つけます…",
+      newChat: "+ 新しいチャット", signIn: "Googleで続ける", signOut: "サインアウト",
+      loginSubtitle: "10の専門AIエージェントが探索、議論し、最良の回答に収束します。",
+      loginFooter: "サインインすることで、プライバシーポリシーと利用規約に同意します。",
+      topUpTitle: "続けるには残高を追加", topUpDesc: "10のAIエージェントで探索を続けるために残高を追加してください。",
+      payBtn: "支払って続ける", sessionCost: "セッションコスト", history: "履歴",
+      pipeline: "パイプライン", noConversations: "まだ会話がありません",
+      starter: "スターター", popular: "人気", bestValue: "最高の価値",
+      gdprText: "サービス提供のためにCookieを使用し、データを保存しています。プライバシーポリシーをご覧ください。",
+      gdprAccept: "同意する", gdprDecline: "拒否する",
+      deleteAccount: "アカウントとデータを削除",
+      paymentNote: "Razorpayで保護されています。全世界のカード対応。",
+    },
+    ko: {
+      placeholder: "무엇이든 물어보세요 — AI 에이전트들이 토론하여 최선의 답을 찾아드립니다…",
+      newChat: "+ 새 채팅", signIn: "Google로 계속하기", signOut: "로그아웃",
+      loginSubtitle: "10개의 전문 AI 에이전트가 탐색, 토론하여 최상의 답을 도출합니다.",
+      loginFooter: "로그인하면 개인정보 처리방침과 이용약관에 동의하는 것입니다.",
+      topUpTitle: "계속하려면 충전하세요", topUpDesc: "10개의 AI 에이전트와 탐색을 계속하려면 잔액을 추가하세요.",
+      payBtn: "결제하고 계속하기", sessionCost: "세션 비용", history: "기록",
+      pipeline: "파이프라인", noConversations: "아직 대화가 없습니다",
+      starter: "스타터", popular: "인기", bestValue: "최고의 가치",
+      gdprText: "서비스 제공을 위해 쿠키를 사용하고 데이터를 저장합니다. 개인정보 처리방침을 참조하세요.",
+      gdprAccept: "동의", gdprDecline: "거부",
+      deleteAccount: "계정 및 데이터 삭제",
+      paymentNote: "Razorpay로 보호됩니다. 모든 국가 카드 사용 가능.",
+    },
+    ru: {
+      placeholder: "Спросите что угодно — агенты обсудят и найдут лучший ответ…",
+      newChat: "+ Новый чат", signIn: "Продолжить с Google", signOut: "Выйти",
+      loginSubtitle: "10 специализированных ИИ-агентов исследуют, спорят и находят лучший ответ.",
+      loginFooter: "Входя в систему, вы соглашаетесь с нашей Политикой конфиденциальности и условиями использования.",
+      topUpTitle: "Пополните баланс для продолжения", topUpDesc: "Добавьте средства, чтобы продолжить работу с 10 агентами ИИ.",
+      payBtn: "Оплатить и продолжить", sessionCost: "Стоимость сессии", history: "История",
+      pipeline: "Конвейер", noConversations: "Пока нет разговоров",
+      starter: "Базовый", popular: "Популярный", bestValue: "Лучшая цена",
+      gdprText: "Мы используем файлы cookie и храним ваши данные для предоставления услуги. См. Политику конфиденциальности.",
+      gdprAccept: "Принять", gdprDecline: "Отклонить",
+      deleteAccount: "Удалить аккаунт и данные",
+      paymentNote: "Защищено Razorpay. Принимаются карты из всех стран.",
+    },
+    it: {
+      placeholder: "Chiedi qualsiasi cosa — gli agenti dibatteranno e troveranno la risposta migliore…",
+      newChat: "+ Nuova chat", signIn: "Continua con Google", signOut: "Esci",
+      loginSubtitle: "10 agenti IA specializzati esplorano, dibattono e convergono sulla risposta migliore.",
+      loginFooter: "Accedendo, accetti la nostra Informativa sulla privacy e i termini di servizio.",
+      topUpTitle: "Ricarica per continuare", topUpDesc: "Aggiungi credito per continuare con 10 agenti IA.",
+      payBtn: "Paga e continua", sessionCost: "Costo della sessione", history: "Cronologia",
+      pipeline: "Pipeline", noConversations: "Nessuna conversazione",
+      starter: "Base", popular: "Popolare", bestValue: "Miglior valore",
+      gdprText: "Utilizziamo i cookie e archiviamo i tuoi dati per fornire il servizio. Vedi la nostra Informativa sulla privacy.",
+      gdprAccept: "Accetta", gdprDecline: "Rifiuta",
+      deleteAccount: "Elimina il mio account e i dati",
+      paymentNote: "Protetto da Razorpay. Carte di tutti i paesi accettate.",
+    },
+    tr: {
+      placeholder: "Her şeyi sorun — ajanlar tartışacak ve en iyi cevabı bulacak…",
+      newChat: "+ Yeni Sohbet", signIn: "Google ile devam et", signOut: "Çıkış yap",
+      loginSubtitle: "10 uzman AI ajan keşfeder, tartışır ve en iyi cevaba ulaşır.",
+      loginFooter: "Giriş yaparak Gizlilik Politikamızı ve hizmet şartlarımızı kabul etmiş olursunuz.",
+      topUpTitle: "Devam etmek için yükle", topUpDesc: "10 AI ajanıyla keşfetmeye devam etmek için bakiye ekleyin.",
+      payBtn: "Öde ve devam et", sessionCost: "Oturum maliyeti", history: "Geçmiş",
+      pipeline: "Boru hattı", noConversations: "Henüz konuşma yok",
+      starter: "Başlangıç", popular: "Popüler", bestValue: "En iyi değer",
+      gdprText: "Hizmeti sağlamak için çerezler kullanır ve verilerinizi depolarız. Gizlilik Politikamıza bakın.",
+      gdprAccept: "Kabul et", gdprDecline: "Reddet",
+      deleteAccount: "Hesabımı ve verilerimi sil",
+      paymentNote: "Razorpay ile güvence altında. Tüm ülke kartları kabul edilir.",
+    },
+  };
+
+  // ── Locale detection ───────────────────────────────────────────────────────
+  const _RTL_LANGS = new Set(['ar','he','fa','ur','yi','dv','ps']);
+  const _INDIA_TZ  = new Set(['Asia/Kolkata','Asia/Calcutta']);
+  const _INDIA_LOCALES = new Set(['en-IN','hi','hi-IN','ta','te','kn','ml','mr','gu','bn','pa','or','as']);
+
+  function detectLocale() {
+    const lang   = navigator.language || 'en';
+    const langCode = lang.split('-')[0].toLowerCase();
+    const tz     = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    const isIndia = _INDIA_TZ.has(tz) || _INDIA_LOCALES.has(lang) || _INDIA_LOCALES.has(langCode);
+    const isRTL   = _RTL_LANGS.has(langCode);
+    // Map locale to translation key (fall back to 'en')
+    const tLang  = TRANSLATIONS[langCode] ? langCode : 'en';
+    return { lang, langCode, tLang, isIndia, isRTL };
+  }
+
+  const _locale = detectLocale();
+
+  // Apply RTL if needed
+  if (_locale.isRTL) {
+    document.documentElement.setAttribute('dir', 'rtl');
+    document.documentElement.setAttribute('lang', _locale.langCode);
+  }
+
+  // ── i18n apply ─────────────────────────────────────────────────────────────
+  function t(key) {
+    const tr = TRANSLATIONS[_locale.tLang] || TRANSLATIONS.en;
+    return tr[key] || TRANSLATIONS.en[key] || key;
+  }
+
+  function applyTranslations() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      // Preserve inner HTML for elements with links (loginFooter, gdprText)
+      if (key === 'loginFooter') {
+        el.innerHTML = t(key) + '';
+      } else {
+        el.textContent = t(key);
+      }
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+    });
+  }
+
+  applyTranslations();
+
+  // ── GDPR consent ───────────────────────────────────────────────────────────
+  function checkGdpr() {
+    if (!localStorage.getItem('gdpr_consent')) {
+      document.getElementById('gdpr-banner').classList.remove('hidden');
+    }
+  }
+  function acceptGdpr() {
+    localStorage.setItem('gdpr_consent', 'accepted');
+    document.getElementById('gdpr-banner').classList.add('hidden');
+  }
+  function declineGdpr() {
+    localStorage.setItem('gdpr_consent', 'declined');
+    document.getElementById('gdpr-banner').classList.add('hidden');
+  }
+  function showPrivacyPolicy() {
+    const el = document.getElementById('privacy-overlay');
+    el.style.display = 'flex';
+  }
+
+  // ── Payment setup — Razorpay for everyone (international cards enabled in dashboard) ──
+  const _PACKS = [
+    { amount: 10,   label: t('starter') },
+    { amount: 500,  label: t('popular') },
+    { amount: 1000, label: t('bestValue') },
+  ];
+
+  function setupRechargeModal() {
+    const grid = document.getElementById('pack-grid');
+    const note = document.getElementById('payment-note');
+    const inp  = document.getElementById('custom-amount');
+    document.getElementById('currency-symbol').textContent = '₹';
+    inp.min = 10;
+    inp.placeholder = 'Custom amount (min ₹10)';
+    note.textContent = t('paymentNote');
+    grid.innerHTML = _PACKS.map(p =>
+      `<button class="pack-btn" onclick="selectPack(${p.amount}, this)">
+        <div class="pack-amount">₹${p.amount.toLocaleString()}</div>
+        <div class="pack-label">${p.label}</div>
+       </button>`
+    ).join('');
+    selectedAmount = 0;
+    inp.value = '';
+    document.getElementById('pay-btn').disabled = true;
+  }
+
+  // ── Delete account (GDPR) ──────────────────────────────────────────────────
+  async function deleteAccount() {
+    const confirmed = confirm('Are you sure? This will permanently delete your account, all conversation history, and balance. This cannot be undone.');
+    if (!confirmed) return;
+    const confirmed2 = confirm('Last chance — permanently delete everything?');
+    if (!confirmed2) return;
+    try {
+      const { data: { session } } = await sbClient.auth.getSession();
+      const token = session?.access_token || '';
+      const res = await fetch('/delete-account', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        await sbClient.auth.signOut();
+        alert('Your account has been deleted.');
+      } else {
+        const d = await res.json();
+        alert('Error: ' + (d.error || 'Could not delete account.'));
+      }
+    } catch (e) {
+      alert('Error: ' + e.message);
+    }
+  }
 
   // ── Textarea auto-grow + expand toggle ───────────────────────────────────
   const ta = document.getElementById('user-input');
@@ -1432,7 +1793,7 @@
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ idea, history: chatHistory }),
+        body: JSON.stringify({ idea, history: chatHistory, language: _locale.langCode }),
       });
 
       // No balance — show recharge modal
@@ -1515,6 +1876,7 @@
       if (!cfg.supabase_url || !cfg.supabase_anon_key) {
         // Supabase not configured — skip auth, show app directly
         document.getElementById('login-overlay').classList.add('hidden');
+        checkGdpr();
         return;
       }
 
@@ -1534,6 +1896,7 @@
         else showLogin();
       });
 
+      checkGdpr();
     } catch (e) {
       // Config fetch failed or timed out — show login screen so user can retry
       document.getElementById('login-overlay').classList.remove('hidden');
@@ -1624,10 +1987,10 @@
       if (!pill) return;
       knownBalancePaise = data.balance_paise;
       const inr = data.balance_inr;
-      pill.textContent = `₹ ${inr.toFixed(2)}`;
-      pill.title = 'Your credit balance — click to recharge';
       pill.onclick = () => showRechargeModal();
       pill.classList.remove('low', 'empty');
+      pill.textContent = `₹ ${inr.toFixed(2)}`;
+      pill.title = 'Your credit balance — click to recharge';
       if (inr <= 0) pill.classList.add('empty');
       else if (inr < 20) pill.classList.add('low');
     } catch {}
@@ -1640,13 +2003,7 @@
     running = false;
     ta.disabled = false;
     setSendMode(false);
-    // Reset modal state
-    selectedAmount = 0;
-    document.getElementById('custom-amount').value = '';
-    document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
-    const payBtn = document.getElementById('pay-btn');
-    payBtn.disabled = true;
-    payBtn.textContent = 'Pay & Continue';
+    setupRechargeModal(); // locale-aware pack buttons
     document.getElementById('recharge-overlay').classList.remove('hidden');
   }
 
@@ -1667,14 +2024,16 @@
 
   async function startPayment() {
     if (selectedAmount < 10) return;
+    await _startRazorpay();
+  }
+
+  async function _startRazorpay() {
     const btn = document.getElementById('pay-btn');
     btn.textContent = 'Creating order…';
     btn.disabled = true;
-
     try {
       const { data: { session } } = await sbClient.auth.getSession();
       const token = session?.access_token || '';
-
       const orderRes = await fetch('/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -1682,7 +2041,6 @@
       });
       const order = await orderRes.json();
       if (!orderRes.ok) throw new Error(order.error || 'Order creation failed');
-
       const options = {
         key: order.key_id,
         amount: order.amount,
@@ -1690,7 +2048,6 @@
         name: 'Verd',
         description: `Verd — ₹${selectedAmount} top-up`,
         order_id: order.order_id,
-        // Only prefill email — no fake phone number (causes risk check failure)
         prefill: { email: session?.user?.email || '' },
         theme: { color: '#2563eb' },
         handler: async (response) => {
@@ -1712,20 +2069,13 @@
             alert('Payment verification failed. Contact support.');
           }
         },
-        modal: {
-          ondismiss: () => {
-            btn.textContent = 'Pay & Continue';
-            btn.disabled = false;
-          }
-        }
+        modal: { ondismiss: () => { btn.textContent = t('payBtn'); btn.disabled = false; } }
       };
-
       const rzp = new Razorpay(options);
       rzp.open();
-
     } catch (e) {
       alert('Payment error: ' + e.message);
-      btn.textContent = 'Pay & Continue';
+      btn.textContent = t('payBtn');
       btn.disabled = false;
     }
   }
@@ -1766,6 +2116,9 @@
 
   // Render welcome screen
   chat().appendChild(buildWelcome());
+
+  // Init recharge modal with locale-correct packs (before user opens it)
+  setupRechargeModal();
 
   // Init on page load
   initAuth();

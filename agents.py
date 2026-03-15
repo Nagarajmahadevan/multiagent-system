@@ -292,7 +292,7 @@ SYSTEM_PROMPTS = {
 }
 
 
-def build_user_prompt(agent_name: str, user_idea: str, previous_outputs: dict, history: list | None = None) -> str:
+def build_user_prompt(agent_name: str, user_idea: str, previous_outputs: dict, history: list | None = None, language: str = "en") -> str:
     """
     Build the user message for a given agent, including the original idea
     and all outputs from previously completed agents.
@@ -337,8 +337,27 @@ def build_user_prompt(agent_name: str, user_idea: str, previous_outputs: dict, h
                 display = AGENT_DISPLAY_NAMES[prev_agent]
                 parts.append(f"## {display}'s Output\n{previous_outputs[prev_agent]}")
 
-    parts.append(
-        f"\n---\nNow produce your output as the {AGENT_DISPLAY_NAMES[agent_name]}. "
-        f"Follow the exact output structure specified in your instructions."
-    )
+    # Language instruction — appended last so it takes highest priority
+    _LANG_NAMES = {
+        "ar": "Arabic", "hi": "Hindi", "zh": "Chinese (Simplified)",
+        "es": "Spanish", "fr": "French", "de": "German", "pt": "Portuguese",
+        "ja": "Japanese", "ko": "Korean", "ru": "Russian", "it": "Italian",
+        "tr": "Turkish", "nl": "Dutch", "pl": "Polish", "id": "Indonesian",
+        "th": "Thai", "vi": "Vietnamese", "sv": "Swedish", "da": "Danish",
+    }
+    lang_code = (language or "en")[:2].lower()
+    if lang_code != "en":
+        lang_name = _LANG_NAMES.get(lang_code, language)
+        parts.append(
+            f"\n---\nNow produce your output as the {AGENT_DISPLAY_NAMES[agent_name]}. "
+            f"Follow the exact output structure specified in your instructions.\n\n"
+            f"CRITICAL LANGUAGE REQUIREMENT: You MUST respond entirely in {lang_name}. "
+            f"All text, headers, bullet points, and analysis must be written in {lang_name}. "
+            f"Do not mix languages."
+        )
+    else:
+        parts.append(
+            f"\n---\nNow produce your output as the {AGENT_DISPLAY_NAMES[agent_name]}. "
+            f"Follow the exact output structure specified in your instructions."
+        )
     return "\n\n".join(parts)

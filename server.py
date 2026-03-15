@@ -30,9 +30,10 @@ static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# ── Razorpay config ───────────────────────────────────────────────────────────
+# ── Razorpay config (India) ───────────────────────────────────────────────────
 RAZORPAY_KEY_ID     = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
 
 # ── Credit config ─────────────────────────────────────────────────────────────
 SUPABASE_URL         = os.getenv("SUPABASE_URL", "")
@@ -296,6 +297,32 @@ async def get_credits(request: Request):
     return JSONResponse({"balance_paise": balance, "balance_inr": round(balance / 100, 2)})
 
 
+
+# ── GDPR ──────────────────────────────────────────────────────────────────────
+
+@app.delete("/delete-account")
+async def delete_account(request: Request):
+    """GDPR: permanently delete all user data and auth record."""
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    sb = get_sb_admin()
+    if not sb:
+        return JSONResponse({"error": "Not configured"}, status_code=503)
+
+    try:
+        sb.table("user_credits").delete().eq("user_id", user_id).execute()
+        sb.table("query_analytics").delete().eq("user_id", user_id).execute()
+        sb.table("conversations").delete().eq("user_id", user_id).execute()
+        sb.auth.admin.delete_user(user_id)
+        return JSONResponse({"success": True})
+    except Exception as e:
+        logger.error(f"Delete account error: {e}")
+        return JSONResponse({"error": "Failed to delete account"}, status_code=500)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     """Serve the main UI."""
@@ -342,7 +369,8 @@ async def run_pipeline(request: Request):
     idea = (body.get("idea") or "").strip()
     if not idea:
         return HTMLResponse('{"error":"No idea provided"}', status_code=400)
-    history = body.get("history") or []
+    history  = body.get("history") or []
+    language = (body.get("language") or "en").strip()[:10]  # sanitize
 
     loop = asyncio.get_event_loop()
     event_queue: asyncio.Queue = asyncio.Queue()
@@ -355,7 +383,7 @@ async def run_pipeline(request: Request):
             config = yaml.safe_load(Path("config.yaml").read_text())
             from pipeline import Pipeline
             p = Pipeline(config, on_event=emit)
-            result = p.run(idea, history=history)
+            result = p.run(idea, history=history, language=language)
             # Build per-agent cost breakdown for analytics
             breakdown = []
             ct = result.get("cost_tracker")

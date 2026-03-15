@@ -30,7 +30,8 @@
       "WebFetch(domain:rdap.org)",
       "WebFetch(domain:pubapi.registry.google)",
       "WebFetch(domain:who.is)",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(ls /Users/nagarajmahadevan/development/Multi_Agent_System/multiagent-system/*.py)"
     ]
   }
 }
