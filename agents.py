@@ -305,12 +305,16 @@ def build_user_prompt(agent_name: str, user_idea: str, previous_outputs: dict, h
     """
     parts = []
 
-    # Prepend prior conversation turns so agents have full context
+    # Prepend prior conversation turns (last 3 only, answers truncated to 600 chars)
     if history:
+        recent = history[-3:]
         hist_lines = []
-        for i, turn in enumerate(history, 1):
+        for i, turn in enumerate(recent, max(1, len(history) - 2)):
+            answer = turn['a']
+            if len(answer) > 600:
+                answer = answer[:600] + "…[truncated]"
             hist_lines.append(
-                f"### Turn {i}\n**User:** {turn['q']}\n\n**Final Answer (previous):**\n{turn['a']}"
+                f"### Turn {i}\n**User:** {turn['q']}\n\n**Final Answer (previous):**\n{answer}"
             )
         parts.append("## Conversation History (prior turns)\n" + "\n\n".join(hist_lines))
 

@@ -331,7 +331,13 @@ async def run_pipeline(request: Request):
     async def generate():
         pipeline_success = False
         while True:
-            event = await event_queue.get()
+            try:
+                # 15s timeout — send SSE keepalive comment to prevent Railway/proxy
+                # from closing the connection during long-running agent calls
+                event = await asyncio.wait_for(event_queue.get(), timeout=15.0)
+            except asyncio.TimeoutError:
+                yield ": keepalive\n\n"
+                continue
             yield f"data: {json.dumps(event)}\n\n"
             if event.get("type") == "pipeline_complete":
                 pipeline_success = True
