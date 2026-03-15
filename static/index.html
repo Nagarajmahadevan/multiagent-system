@@ -502,6 +502,25 @@
     .hist-a { font-size: 11px; color: var(--muted); line-height: 1.5; }
     .hist-note { font-size: 11px; color: #555; padding: 8px 14px; text-align: center; }
 
+    /* ── Conversation list (sidebar) ── */
+    .conv-section {
+      border-bottom: 1px solid #2e2e2e;
+      flex-shrink: 0;
+    }
+    .conv-list { overflow-y: auto; max-height: 220px; padding-bottom: 4px; }
+    .conv-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 10px; margin: 1px 6px; border-radius: 6px;
+      cursor: pointer; font-size: 12px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: background .15s, color .15s;
+    }
+    .conv-item:hover { background: rgba(255,255,255,.05); color: var(--text); }
+    .conv-item.active { background: #1d3a5f; color: #93c5fd; }
+    .conv-item-dot { width:6px; height:6px; border-radius:50%; background:#404040; flex-shrink:0; }
+    .conv-item.active .conv-item-dot { background:#60a5fa; }
+    .conv-list-empty { font-size: 11px; color: #444; padding: 6px 14px 10px; }
+
     /* ── Turn divider ── */
     .turn-divider {
       display: flex; align-items: center; gap: 10px;
@@ -783,6 +802,14 @@
 
   <!-- ── Sidebar ── -->
   <aside id="sidebar">
+    <!-- Conversation history -->
+    <div class="conv-section">
+      <div class="sidebar-title">History</div>
+      <div class="conv-list" id="conv-list">
+        <div class="conv-list-empty">No conversations yet</div>
+      </div>
+    </div>
+
     <div class="sidebar-title">Pipeline</div>
 
     <div class="layer-group">
@@ -896,6 +923,10 @@
   let runId = 0; // increments each submit so card IDs are unique across runs
   let knownBalancePaise = 0; // last fetched balance from server
 
+  // Supabase conversation persistence
+  let currentConvId = null;   // UUID of the active conversation row
+  let allConversations = [];  // [{id, title, turns, updated_at}] — loaded on login
+
   // ── Textarea auto-grow + expand toggle ───────────────────────────────────
   const ta = document.getElementById('user-input');
   const expandBtn = document.getElementById('expand-btn');
@@ -991,24 +1022,107 @@
     });
   }
 
-  // ── History persistence ───────────────────────────────────────────────────
-  const HISTORY_KEY = 'mads_chat_history';
+  // ── Conversation persistence (Supabase) ──────────────────────────────────
 
-  function saveHistory() {
-    if (chatHistory.length > 0)
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(chatHistory));
+  async function loadConversations() {
+    if (!sbClient) return;
+    try {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session) return;
+      const { data, error } = await sbClient
+        .from('conversations')
+        .select('id, title, turns, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(40);
+      if (error) throw error;
+      allConversations = data || [];
+      renderConvList();
+    } catch (e) {
+      console.error('loadConversations:', e);
+    }
   }
 
-  function loadHistory() {
+  function renderConvList() {
+    const el = document.getElementById('conv-list');
+    if (!allConversations.length) {
+      el.innerHTML = '<div class="conv-list-empty">No conversations yet</div>';
+      return;
+    }
+    el.innerHTML = allConversations.map(c => `
+      <div class="conv-item ${c.id === currentConvId ? 'active' : ''}" onclick="openConversation('${c.id}')">
+        <span class="conv-item-dot"></span>
+        <span style="overflow:hidden;text-overflow:ellipsis;">${escHtml((c.title || 'Untitled').slice(0, 50))}</span>
+      </div>`).join('');
+  }
+
+  async function saveConversation() {
+    if (!sbClient || !chatHistory.length) return;
     try {
-      const saved = localStorage.getItem(HISTORY_KEY);
-      if (saved) chatHistory = JSON.parse(saved);
-    } catch {}
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session) return;
+      if (!currentConvId) currentConvId = crypto.randomUUID();
+      const { error } = await sbClient.from('conversations').upsert({
+        id: currentConvId,
+        user_id: session.user.id,
+        title: chatHistory[0].q.slice(0, 80),
+        turns: chatHistory,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      await loadConversations(); // refresh list
+    } catch (e) {
+      console.error('saveConversation:', e);
+    }
+  }
+
+  async function openConversation(id) {
+    if (running) return;
+    const conv = allConversations.find(c => c.id === id);
+    if (!conv) return;
+
+    currentConvId = id;
+    chatHistory = conv.turns || [];
+    currentIdea = chatHistory.length ? chatHistory[chatHistory.length - 1].q : '';
+    currentSummarizerOutput = chatHistory.length ? chatHistory[chatHistory.length - 1].a : '';
+
+    // Render Q+A pairs in chat area
+    reset();
+    lastLayer = null;
+    const area = chat();
+    area.innerHTML = '';
+    chatHistory.forEach((turn, i) => {
+      if (i > 0) {
+        const div = document.createElement('div');
+        div.className = 'turn-divider';
+        div.innerHTML = `<span>Follow-up #${i + 1}</span>`;
+        area.appendChild(div);
+      }
+      const qb = document.createElement('div');
+      qb.className = 'q-bubble';
+      qb.textContent = turn.q;
+      area.appendChild(qb);
+
+      const card = document.createElement('div');
+      card.className = 'a-card is-final';
+      card.innerHTML = `
+        <div class="final-label">✨ Final Answer</div>
+        <div class="a-header">
+          <span class="a-emoji">📋</span>
+          <span class="a-name">Summarizer</span>
+        </div>
+        <div class="a-body markdown">${marked.parse(turn.a)}</div>`;
+      area.appendChild(card);
+    });
+
+    document.getElementById('newchat-btn').style.display = 'block';
+    renderConvList();
+    toggleSidebar(false);
+    setTimeout(scrollBottom, 100);
   }
 
   function clearHistory() {
     chatHistory = [];
-    localStorage.removeItem(HISTORY_KEY);
+    currentConvId = null;
   }
 
   function newChat() {
@@ -1022,35 +1136,16 @@
     area.innerHTML = '';
     area.appendChild(buildWelcome());
     document.getElementById('newchat-btn').style.display = 'none';
+    renderConvList();
   }
 
   function buildWelcome() {
     const w = document.createElement('div');
     w.id = 'welcome';
-
-    let historyHtml = '';
-    if (chatHistory.length > 0) {
-      const items = chatHistory.map((t, i) => `
-        <div class="hist-item">
-          <div class="hist-q">${escHtml(t.q)}</div>
-          <div class="hist-a">${escHtml(t.a.slice(0, 200))}${t.a.length > 200 ? '…' : ''}</div>
-        </div>`).join('');
-      historyHtml = `
-        <div class="hist-panel">
-          <div class="hist-header">
-            <span>📜 Previous session (${chatHistory.length} turn${chatHistory.length > 1 ? 's' : ''})</span>
-            <button class="hist-clear-btn" onclick="newChat()">Clear</button>
-          </div>
-          ${items}
-          <p class="hist-note">Your next question will build on this context.</p>
-        </div>`;
-    }
-
     w.innerHTML = `
       <div class="w-icon">⚖️</div>
       <h2>Ask anything. Get your verdict.</h2>
       <p>10 specialized AI agents explore, debate, and converge on the best answer to your question.</p>
-      ${historyHtml}
       <div class="agent-tags">
         <span class="agent-tag">🔮 Visionary</span>
         <span class="agent-tag">🔬 Researcher</span>
@@ -1217,7 +1312,7 @@
         // Save this turn to history
         if (currentIdea && currentSummarizerOutput) {
           chatHistory.push({ q: currentIdea, a: currentSummarizerOutput });
-          saveHistory();
+          saveConversation(); // persist to Supabase
           document.getElementById('newchat-btn').style.display = 'block';
         }
         fetchBalance();
@@ -1431,6 +1526,7 @@
     document.getElementById('login-overlay').classList.add('hidden');
     document.getElementById('user-area').style.display = 'flex';
     fetchBalance();
+    loadConversations(); // load user's conversation history
     document.getElementById('user-name').textContent = user.user_metadata?.full_name || user.email;
     const avatar = document.getElementById('user-avatar');
     if (user.user_metadata?.avatar_url) {
