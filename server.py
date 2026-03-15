@@ -37,8 +37,10 @@ RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 # ── Credit config ─────────────────────────────────────────────────────────────
 SUPABASE_URL         = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
-QUERY_COST_PAISE     = 1000   # ₹10 per query
-FREE_CREDITS_PAISE   = 1000   # 1 free query for new users
+MARKUP_INR           = 2.0    # ₹2 profit per query (not shown to user)
+MARKUP_PAISE         = 200    # same in paise
+MIN_BALANCE_PAISE    = 300    # minimum balance required to start a query
+FREE_CREDITS_PAISE   = 1000   # 1 free query worth of credits for new users
 
 _sb_admin = None
 
@@ -76,17 +78,51 @@ def get_or_create_balance(user_id: str) -> int:
         return 999999
 
 
-def deduct_balance(user_id: str):
+def deduct_balance_amount(user_id: str, paise: int):
+    """Deduct an exact paise amount from the user's balance."""
     sb = get_sb_admin()
     if not sb:
         return
     try:
         result = sb.table("user_credits").select("balance_paise").eq("user_id", user_id).execute()
         if result.data:
-            new_bal = max(0, result.data[0]["balance_paise"] - QUERY_COST_PAISE)
+            new_bal = max(0, result.data[0]["balance_paise"] - paise)
             sb.table("user_credits").update({"balance_paise": new_bal}).eq("user_id", user_id).execute()
     except Exception as e:
         logger.error(f"Deduct balance error: {e}")
+
+
+def insert_analytics(
+    user_id: str,
+    prompt: str,
+    actual_cost_inr: float,
+    profit_inr: float,
+    charged_inr: float,
+    elapsed: float,
+    agent_breakdown: list,
+    total_input_tokens: int,
+    total_output_tokens: int,
+):
+    """Insert a full query analytics record into Supabase."""
+    sb = get_sb_admin()
+    if not sb:
+        return
+    try:
+        from datetime import datetime, timezone
+        sb.table("query_analytics").insert({
+            "user_id": user_id,
+            "prompt": prompt[:2000],  # cap at 2000 chars
+            "actual_cost_inr": round(actual_cost_inr, 6),
+            "profit_inr": round(profit_inr, 6),
+            "charged_inr": round(charged_inr, 6),
+            "elapsed_seconds": round(elapsed, 2),
+            "total_input_tokens": total_input_tokens,
+            "total_output_tokens": total_output_tokens,
+            "agent_breakdown": agent_breakdown,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception as e:
+        logger.error(f"Analytics insert error: {e}")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -287,7 +323,8 @@ def llms():
 async def run_pipeline(request: Request):
     """
     Accept a JSON body {"idea": "..."} and stream pipeline events as SSE.
-    Checks user credits before running. Deducts on success.
+    Checks user credits before running. Deducts actual cost + ₹2 markup on success.
+    Stores full analytics in Supabase.
     """
     # ── Auth & credit check ───────────────────────────────────────────────────
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
@@ -297,7 +334,7 @@ async def run_pipeline(request: Request):
         if not user_id:
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         balance = get_or_create_balance(user_id)
-        if balance < QUERY_COST_PAISE:
+        if balance < MIN_BALANCE_PAISE:
             return JSONResponse({"error": "insufficient_credits"}, status_code=402)
 
     # ── Run pipeline ──────────────────────────────────────────────────────────
@@ -318,7 +355,28 @@ async def run_pipeline(request: Request):
             config = yaml.safe_load(Path("config.yaml").read_text())
             from pipeline import Pipeline
             p = Pipeline(config, on_event=emit)
-            p.run(idea, history=history)
+            result = p.run(idea, history=history)
+            # Build per-agent cost breakdown for analytics
+            breakdown = []
+            ct = result.get("cost_tracker")
+            if ct:
+                for rec in ct.records:
+                    breakdown.append({
+                        "agent": rec.agent_name,
+                        "model": rec.model,
+                        "input_tokens": rec.input_tokens,
+                        "output_tokens": rec.output_tokens,
+                        "cost_inr": round(rec.total_cost_inr, 6),
+                    })
+            # Emit internal event (intercepted in generate(), never forwarded to client)
+            emit({
+                "type": "_internal_result",
+                "actual_cost_inr": ct.total_cost_inr if ct else 0,
+                "total_input_tokens": ct.total_input_tokens if ct else 0,
+                "total_output_tokens": ct.total_output_tokens if ct else 0,
+                "elapsed": result.get("elapsed_seconds", 0),
+                "agent_breakdown": breakdown,
+            })
         except Exception as exc:
             logger.exception("Pipeline error")
             emit({"type": "error", "message": str(exc)})
@@ -330,6 +388,7 @@ async def run_pipeline(request: Request):
 
     async def generate():
         pipeline_success = False
+        internal_result = None
         while True:
             try:
                 # 15s timeout — send SSE keepalive comment to prevent Railway/proxy
@@ -338,14 +397,39 @@ async def run_pipeline(request: Request):
             except asyncio.TimeoutError:
                 yield ": keepalive\n\n"
                 continue
+
+            if event.get("type") == "_internal_result":
+                # Internal only — capture and never forward to client
+                internal_result = event
+                continue
+
             yield f"data: {json.dumps(event)}\n\n"
+
             if event.get("type") == "pipeline_complete":
                 pipeline_success = True
             if event.get("type") == "done":
                 break
-        # Deduct only on successful pipeline completion
-        if pipeline_success and user_id and SUPABASE_SERVICE_KEY:
-            deduct_balance(user_id)
+
+        # ── Billing & analytics on successful completion ──────────────────
+        if pipeline_success and user_id and SUPABASE_SERVICE_KEY and internal_result:
+            actual_cost_inr = internal_result.get("actual_cost_inr", 0)
+            charged_inr = actual_cost_inr + MARKUP_INR
+            charged_paise = int(round(charged_inr * 100))
+            deduct_balance_amount(user_id, charged_paise)
+            insert_analytics(
+                user_id=user_id,
+                prompt=idea,
+                actual_cost_inr=actual_cost_inr,
+                profit_inr=MARKUP_INR,
+                charged_inr=charged_inr,
+                elapsed=internal_result.get("elapsed", 0),
+                agent_breakdown=internal_result.get("agent_breakdown", []),
+                total_input_tokens=internal_result.get("total_input_tokens", 0),
+                total_output_tokens=internal_result.get("total_output_tokens", 0),
+            )
+        elif pipeline_success and user_id and SUPABASE_SERVICE_KEY:
+            # Fallback: no cost data, deduct minimum markup only
+            deduct_balance_amount(user_id, MARKUP_PAISE)
 
     return StreamingResponse(
         generate(),

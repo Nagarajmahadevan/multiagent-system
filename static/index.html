@@ -919,6 +919,7 @@
   };
 
   // ── State ─────────────────────────────────────────────────────────────────
+  const MARKUP_INR = 2.0; // ₹2 profit per query — added server-side, shown as total to user
   let totalCost = 0, totalIn = 0, totalOut = 0, doneCount = 0;
   let ACTIVE_TOTAL = 10;
 
@@ -1318,9 +1319,10 @@
         errorCard(ev.agent, ev.error);
         break;
 
-      case 'pipeline_complete':
+      case 'pipeline_complete': {
         progress(ACTIVE_TOTAL);
-        setStatus(`✓ Done  ₹ ${(ev.total_cost_inr || totalCost).toFixed(4)}  •  ${ev.elapsed}s`);
+        const chargedInr = (ev.total_cost_inr || totalCost) + MARKUP_INR;
+        setStatus(`✓ Done  ₹ ${chargedInr.toFixed(2)}  •  ${ev.elapsed}s`);
         // Save this turn to history
         if (currentIdea && currentSummarizerOutput) {
           chatHistory.push({ q: currentIdea, a: currentSummarizerOutput });
@@ -1330,6 +1332,7 @@
         fetchBalance();
         setTimeout(scrollBottom, 400);
         break;
+      }
 
       case 'error':
         setStatus('✕ Error: ' + ev.message, 'error');
