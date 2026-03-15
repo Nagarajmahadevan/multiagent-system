@@ -98,6 +98,12 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* Global touch optimizations */
+    button, input, textarea, a, select {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
     :root {
       --bg:           #212121;
       --sidebar-bg:   #171717;
@@ -121,6 +127,8 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ── Header ── */
@@ -169,6 +177,7 @@
       flex-direction: column;
       flex-shrink: 0;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .sidebar-title {
       font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -217,6 +226,8 @@
     #chat-area {
       flex: 1; overflow-y: auto; padding: 28px 28px 16px;
       scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
     }
 
     /* welcome */
@@ -357,7 +368,7 @@
       display:flex; align-items:flex-end; gap:10px;
       background:var(--input-bg); border:1px solid #404040;
       border-radius:14px; padding:10px 10px 10px 15px;
-      transition:border-color .2s;
+      transition:border-color .2s; min-width:0;
     }
     .input-wrap:focus-within { border-color:#60a5fa; }
     #user-input {
@@ -377,7 +388,7 @@
     #expand-btn:hover { color:#93c5fd; }
     #send-btn {
       background:#2563eb; border:none; border-radius:9px;
-      width:34px; height:34px; cursor:pointer; flex-shrink:0;
+      width:40px; height:40px; min-width:40px; cursor:pointer; flex-shrink:0;
       display:flex; align-items:center; justify-content:center;
       color:#fff; transition:background .2s, opacity .2s;
     }
@@ -405,8 +416,12 @@
       padding: 48px 40px;
       text-align: center;
       max-width: 380px;
-      width: 90%;
+      width: min(90%, 380px);
       box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    @media (max-width: 480px) {
+      .login-card { padding: 36px 24px; border-radius: 16px; }
+      .login-card h2 { font-size: 20px; }
     }
     .login-icon { font-size: 48px; margin-bottom: 16px; }
     .login-card h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
@@ -568,29 +583,29 @@
     }
     #sidebar-backdrop.open { display: block; }
 
-    /* ── Mobile styles ── */
+    /* ── Mobile styles (≤768px) ── */
     @media (max-width: 768px) {
       #menu-btn { display: flex; align-items: center; justify-content: center; }
 
       header { padding: 0 12px; gap: 8px; }
-      header h1 { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      header h1 { font-size: 13px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
       /* hide username on mobile */
       .user-name { display: none; }
 
       /* shrink header right cluster */
-      .user-area { gap: 6px; }
+      .user-area { gap: 5px; flex-shrink: 0; }
       #status-pill { display: none; }
-      .newchat-btn { font-size: 10px; padding: 3px 8px; }
-      .balance-pill { font-size: 11px; padding: 2px 8px; }
-      .signout-btn { font-size: 10px; padding: 3px 8px; }
-      .user-avatar { width: 24px; height: 24px; }
+      .newchat-btn { font-size: 10px; padding: 3px 8px; min-height: 28px; }
+      .balance-pill { font-size: 11px; padding: 3px 8px; min-height: 28px; }
+      .signout-btn { font-size: 10px; padding: 3px 8px; min-height: 28px; }
+      .user-avatar { width: 26px; height: 26px; }
 
       /* Sidebar slides in as overlay */
       aside {
         position: fixed; top: 50px; left: 0; bottom: 0;
         z-index: 100;
-        width: 240px;
+        width: min(260px, 80vw);
         transform: translateX(-100%);
         transition: transform .25s ease;
         border-right: 1px solid #2e2e2e;
@@ -601,32 +616,89 @@
       .layout { position: relative; }
 
       /* Chat area */
-      #chat-area { padding: 16px 12px 10px; }
+      #chat-area { padding: 14px 12px 10px; }
 
-      /* Input area */
-      #input-area { padding: 10px 12px max(14px, env(safe-area-inset-bottom)); }
+      /* Input area — safe-area insets for landscape notch */
+      #input-area {
+        padding: 10px max(12px, env(safe-area-inset-right))
+                 max(14px, env(safe-area-inset-bottom))
+                 max(12px, env(safe-area-inset-left));
+      }
 
-      /* Question bubble full width on mobile */
-      .q-bubble { max-width: 95%; }
+      /* CRITICAL: Prevent iOS zoom on input focus (requires font-size ≥ 16px) */
+      #user-input { font-size: 16px; }
+      #custom-amount { font-size: 16px; }
 
-      /* Agent card fonts */
+      /* Question bubble */
+      .q-bubble { max-width: 95%; font-size: 14px; }
+
+      /* Agent card */
       .a-body { padding: 12px; }
-      .a-header { padding: 9px 12px; }
-      .a-footer { padding: 7px 12px; }
-      .md-out { font-size: 13px; }
+      .a-header { padding: 9px 12px; gap: 8px; }
+      .a-footer { padding: 7px 12px; gap: 8px; }
+      .md-out { font-size: 13.5px; }
+
+      /* Hide model badge in card header on mobile to prevent overflow */
+      .a-header .badge + .badge { display: none; }
+
+      /* Complexity banner */
+      .complexity-banner { font-size: 11px; padding: 8px 12px; gap: 8px; }
 
       /* Welcome */
+      #welcome .w-icon { font-size: 42px; margin-bottom: 14px; }
       #welcome h2 { font-size: 20px; }
-      #welcome p  { font-size: 13px; }
+      #welcome p  { font-size: 13px; max-width: 290px; }
       .hist-panel { max-width: 100%; }
+      .agent-tags { max-width: 100%; }
 
-      /* Recharge grid 2 cols on very small */
-      .pack-grid { grid-template-columns: repeat(2, 1fr); }
+      /* Recharge modal — bottom sheet */
+      #recharge-overlay { align-items: flex-end; }
+      .recharge-card {
+        width: 100%; max-width: 100%;
+        border-radius: 20px 20px 0 0;
+        padding: 28px 20px max(24px, env(safe-area-inset-bottom));
+        max-height: 92dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      /* Pack grid — 3 cols still, slightly tighter */
+      .pack-grid { gap: 8px; }
+      .pack-btn { padding: 12px 6px; }
+      .pack-amount { font-size: 16px; }
     }
 
-    @media (max-width: 400px) {
+    /* ── Small phones (≤390px) ── */
+    @media (max-width: 390px) {
+      header h1 { font-size: 12px; }
+      .newchat-btn { display: none; }
+      .pack-grid { grid-template-columns: repeat(2, 1fr); }
+      .recharge-card { padding: 24px 16px max(20px, env(safe-area-inset-bottom)); }
+    }
+
+    /* ── Very small phones (≤360px) ── */
+    @media (max-width: 360px) {
       header h1 { font-size: 11px; }
+      .signout-btn { display: none; }
       .pack-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Landscape on mobile ── */
+    @media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
+      aside { top: 50px; }
+      #chat-area {
+        padding: 10px max(12px, env(safe-area-inset-right))
+                 8px max(12px, env(safe-area-inset-left));
+      }
+      #input-area {
+        padding: 6px max(12px, env(safe-area-inset-right))
+                 max(8px, env(safe-area-inset-bottom))
+                 max(12px, env(safe-area-inset-left));
+      }
+      #welcome .w-icon { font-size: 28px; margin-bottom: 6px; }
+      #welcome h2 { font-size: 16px; margin-bottom: 4px; }
+      #welcome p, .agent-tags { display: none; }
+      .recharge-card { max-height: 88dvh; border-radius: 16px; width: 90%; max-width: 420px; }
+      #recharge-overlay { align-items: center; }
     }
   </style>
 </head>
@@ -1522,6 +1594,30 @@
       }
     }
   });
+
+  // Close recharge modal when tapping overlay backdrop (outside card)
+  document.getElementById('recharge-overlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.currentTarget.classList.add('hidden');
+    }
+  });
+
+  // Visual viewport API — keeps input above keyboard on Android Chrome
+  if (window.visualViewport) {
+    let lastKbHeight = 0;
+    const inputArea = document.getElementById('input-area');
+    window.visualViewport.addEventListener('resize', () => {
+      if (window.innerWidth > 768) return;
+      const kbHeight = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      if (Math.abs(kbHeight - lastKbHeight) < 10) return; // ignore small jitter
+      lastKbHeight = kbHeight;
+      if (kbHeight > 60) {
+        inputArea.style.paddingBottom = kbHeight + 'px';
+      } else {
+        inputArea.style.paddingBottom = '';
+      }
+    });
+  }
 
   // Restore history from localStorage
   loadHistory();
