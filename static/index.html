@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Multi-Agent Debate System</title>
+  <title>Verd — Ask anything. Get your verdict.</title>
   <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
@@ -547,8 +547,8 @@
 <!-- ── Login Overlay ── -->
 <div id="login-overlay">
   <div class="login-card">
-    <div class="login-icon">🧠</div>
-    <h2>Multi-Agent Debate System</h2>
+    <div class="login-icon">⚖️</div>
+    <h2>Verd</h2>
     <p>10 specialized AI agents explore, debate, and converge on the best answer to any question.</p>
     <button class="google-btn" onclick="signInWithGoogle()">
       <svg width="18" height="18" viewBox="0 0 48 48">
@@ -604,7 +604,7 @@
       <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
     </svg>
   </button>
-  <h1>🧠 Multi-Agent Debate System</h1>
+  <h1>⚖️ Verd</h1>
   <div style="display:flex;align-items:center;gap:12px;">
     <div id="status-pill">● Ready</div>
     <div class="user-area" id="user-area" style="display:none;">
@@ -886,9 +886,9 @@
     }
 
     w.innerHTML = `
-      <div class="w-icon">🧠</div>
-      <h2>What do you want to solve?</h2>
-      <p>10 specialized AI agents will explore, debate, compress, and converge on the best solution to your question.</p>
+      <div class="w-icon">⚖️</div>
+      <h2>Ask anything. Get your verdict.</h2>
+      <p>10 specialized AI agents explore, debate, and converge on the best answer to your question.</p>
       ${historyHtml}
       <div class="agent-tags">
         <span class="agent-tag">🔮 Visionary</span>
@@ -1375,8 +1375,8 @@
         key: order.key_id,
         amount: order.amount,
         currency: 'INR',
-        name: 'Multi-Agent Debate System',
-        description: `Top up ₹${selectedAmount}`,
+        name: 'Verd',
+        description: `Verd — ₹${selectedAmount} top-up`,
         order_id: order.order_id,
         // Only prefill email — no fake phone number (causes risk check failure)
         prefill: { email: session?.user?.email || '' },
