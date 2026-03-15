@@ -571,15 +571,15 @@
     <h2>Top up to continue</h2>
     <p>You've used your free query. Add balance to keep exploring with 10 AI agents.</p>
     <div class="pack-grid">
-      <button class="pack-btn" onclick="selectPack(10)">
+      <button class="pack-btn" onclick="selectPack(10, this)">
         <div class="pack-amount">₹10</div>
         <div class="pack-label">Starter</div>
       </button>
-      <button class="pack-btn" onclick="selectPack(500)">
+      <button class="pack-btn" onclick="selectPack(500, this)">
         <div class="pack-amount">₹500</div>
         <div class="pack-label">Popular</div>
       </button>
-      <button class="pack-btn" onclick="selectPack(1000)">
+      <button class="pack-btn" onclick="selectPack(1000, this)">
         <div class="pack-amount">₹1000</div>
         <div class="pack-label">Best value</div>
       </button>
@@ -1335,14 +1335,21 @@
     running = false;
     ta.disabled = false;
     setSendMode(false);
+    // Reset modal state
+    selectedAmount = 0;
+    document.getElementById('custom-amount').value = '';
+    document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
+    const payBtn = document.getElementById('pay-btn');
+    payBtn.disabled = true;
+    payBtn.textContent = 'Pay & Continue';
     document.getElementById('recharge-overlay').classList.remove('hidden');
   }
 
-  function selectPack(amount) {
+  function selectPack(amount, el) {
     selectedAmount = amount;
-    document.getElementById('custom-amount').value = '';
+    document.getElementById('custom-amount').value = amount;
     document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
-    event.currentTarget.classList.add('selected');
+    if (el) el.classList.add('selected');
     document.getElementById('pay-btn').disabled = false;
   }
 
