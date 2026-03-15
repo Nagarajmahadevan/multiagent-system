@@ -267,6 +267,22 @@ def index():
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
+@app.get("/robots.txt", response_class=HTMLResponse)
+def robots():
+    return HTMLResponse((static_dir / "robots.txt").read_text(), media_type="text/plain")
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    from fastapi.responses import Response
+    return Response((static_dir / "sitemap.xml").read_text(), media_type="application/xml")
+
+
+@app.get("/llms.txt", response_class=HTMLResponse)
+def llms():
+    return HTMLResponse((static_dir / "llms.txt").read_text(), media_type="text/plain")
+
+
 @app.post("/run")
 async def run_pipeline(request: Request):
     """

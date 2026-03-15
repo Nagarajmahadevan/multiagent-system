@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Disallow: /run
+Disallow: /create-order
+Disallow: /create-payment-link
+Disallow: /verify-payment
+Disallow: /credits
+Disallow: /payment-return
+
+Sitemap: https://getverd.com/sitemap.xml
+
+# LLM crawlers
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Googlebot
+Allow: /

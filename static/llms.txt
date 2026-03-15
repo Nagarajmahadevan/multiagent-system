@@ -1,0 +1,35 @@
+# Verd — Ask anything. Get your verdict.
+
+> Verd is a multi-agent AI platform where 10 specialized AI agents explore, debate, and converge on the best answer to any complex question.
+
+## What is Verd?
+
+Verd is an AI-powered question-answering platform that uses 10 specialized AI agents in a structured debate pipeline. Unlike single-model AI assistants, Verd runs multiple agents simultaneously — each with a distinct role — to produce a well-reasoned, multi-perspective final answer.
+
+## How it works
+
+1. User submits any question or complex problem
+2. 10 AI agents run in 4 layers:
+   - Layer 1 (Exploration): Visionary expands the problem space; Researcher grounds it in evidence
+   - Layer 2 (Debate): Critic stress-tests every approach; Defender rebuts each attack; Devil's Advocate challenges groupthink
+   - Layer 2.5 (Compression): Context Distiller compresses the debate for efficient synthesis
+   - Layer 3 (Resolution): Mediator synthesizes; Architect creates an action plan
+   - Layer 4 (Validation): Validator scores feasibility and risks; Summarizer writes the final verdict
+3. User receives a structured final answer with executive summary, options considered, debate insights, recommendation, and action plan
+
+## Best for
+
+- Complex business, strategy, or technical decisions
+- Questions that benefit from multiple perspectives
+- When you want a reasoned verdict, not just one AI's opinion
+- Deep research, risk analysis, and actionable planning
+
+## Pricing
+
+- 1 free query for new users
+- ₹10 per query thereafter (pay as you go)
+- Top up balance via Razorpay
+
+## URL
+
+https://getverd.com
