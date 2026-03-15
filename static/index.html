@@ -1245,23 +1245,41 @@
   }
 
   // ── Payment setup — Razorpay for everyone (international cards enabled in dashboard) ──
-  const _PACKS = [
-    { amount: 10,   label: t('starter') },
-    { amount: 500,  label: t('popular') },
-    { amount: 1000, label: t('bestValue') },
+  const _INR_PER_USD = 84; // conversion rate for display only
+  const _isIndiaUser = _locale.isIndia;
+
+  // India packs: INR amounts. International packs: USD display → converted to INR for Razorpay.
+  const _INDIA_PACKS = [
+    { display: '₹10',    inr: 10,   label: t('starter') },
+    { display: '₹500',   inr: 500,  label: t('popular') },
+    { display: '₹1,000', inr: 1000, label: t('bestValue') },
+  ];
+  const _INTL_PACKS = [
+    { display: '$1',  inr: Math.round(1  * _INR_PER_USD), label: t('starter') },
+    { display: '$5',  inr: Math.round(5  * _INR_PER_USD), label: t('popular') },
+    { display: '$10', inr: Math.round(10 * _INR_PER_USD), label: t('bestValue') },
   ];
 
   function setupRechargeModal() {
-    const grid = document.getElementById('pack-grid');
-    const note = document.getElementById('payment-note');
-    const inp  = document.getElementById('custom-amount');
-    document.getElementById('currency-symbol').textContent = '₹';
-    inp.min = 10;
-    inp.placeholder = 'Custom amount (min ₹10)';
+    const grid  = document.getElementById('pack-grid');
+    const note  = document.getElementById('payment-note');
+    const inp   = document.getElementById('custom-amount');
+    const sym   = document.getElementById('currency-symbol');
+    const packs = _isIndiaUser ? _INDIA_PACKS : _INTL_PACKS;
+
+    if (_isIndiaUser) {
+      sym.textContent = '₹';
+      inp.min = 10;
+      inp.placeholder = 'Custom amount (min ₹10)';
+    } else {
+      sym.textContent = '$';
+      inp.min = 1;
+      inp.placeholder = 'Custom amount in USD (min $1)';
+    }
     note.textContent = t('paymentNote');
-    grid.innerHTML = _PACKS.map(p =>
-      `<button class="pack-btn" onclick="selectPack(${p.amount}, this)">
-        <div class="pack-amount">₹${p.amount.toLocaleString()}</div>
+    grid.innerHTML = packs.map(p =>
+      `<button class="pack-btn" onclick="selectPack(${p.inr}, this)">
+        <div class="pack-amount">${p.display}</div>
         <div class="pack-label">${p.label}</div>
        </button>`
     ).join('');
@@ -2016,10 +2034,16 @@
   }
 
   function onCustomAmount() {
-    const val = parseInt(document.getElementById('custom-amount').value);
-    selectedAmount = (val >= 10) ? val : 0;
+    const val = parseFloat(document.getElementById('custom-amount').value);
+    if (_isIndiaUser) {
+      selectedAmount = (val >= 10) ? Math.round(val) : 0;
+      document.getElementById('pay-btn').disabled = selectedAmount < 10;
+    } else {
+      // User types USD — convert to INR for Razorpay
+      selectedAmount = (val >= 1) ? Math.round(val * _INR_PER_USD) : 0;
+      document.getElementById('pay-btn').disabled = val < 1;
+    }
     document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
-    document.getElementById('pay-btn').disabled = selectedAmount < 10;
   }
 
   async function startPayment() {
@@ -2046,7 +2070,9 @@
         amount: order.amount,
         currency: 'INR',
         name: 'Verd',
-        description: `Verd — ₹${selectedAmount} top-up`,
+        description: _isIndiaUser
+          ? `Verd — ₹${selectedAmount} top-up`
+          : `Verd — $${Math.round(selectedAmount / _INR_PER_USD)} top-up`,
         order_id: order.order_id,
         prefill: { email: session?.user?.email || '' },
         theme: { color: '#2563eb' },
