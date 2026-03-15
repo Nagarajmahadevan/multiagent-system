@@ -8,7 +8,28 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(curl -s https://web-production-abbf.up.railway.app/config)"
+      "Bash(curl -s https://web-production-abbf.up.railway.app/config)",
+      "WebSearch",
+      "WebFetch(domain:razorpay.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:lookup.icann.org)",
+      "WebFetch(domain:whois.domaintools.com)",
+      "Bash(dig +short arbitr.app A)",
+      "Bash(for domain:*)",
+      "Bash(do echo:*)",
+      "Bash(whois arbitr.app)",
+      "Bash(whois -h whois.nic.app arbitr.app)",
+      "Bash(whois -h whois.nic.google arbitr.app)",
+      "Bash(curl -s https://rdap.verisign.com/com/v1/domain/arbitr.com)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''TAKEN - Registrar:'''', d.get\\(''''entities'''',[{}]\\)[0].get\\(''''vcardArray'''',[[],[]]\\)[1][1][3] if d.get\\(''''entities''''\\) else ''''unknown'''', ''''| Created:'''', [e[''''eventDate''''] for e in d.get\\(''''events'''',[]\\) if e.get\\(''''eventAction''''\\)==''''registration'''']\\)\")",
+      "WebFetch(domain:rdap.verisign.com)",
+      "WebFetch(domain:rdap.nic.app)",
+      "WebFetch(domain:rdap.nic.io)",
+      "WebFetch(domain:rdap.centralnic.com)",
+      "WebFetch(domain:www.whois.com)",
+      "WebFetch(domain:rdap.org)",
+      "WebFetch(domain:pubapi.registry.google)",
+      "WebFetch(domain:who.is)"
     ]
   }
 }
