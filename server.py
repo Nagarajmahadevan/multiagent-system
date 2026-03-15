@@ -130,6 +130,85 @@ async def create_order(request: Request):
     })
 
 
+@app.post("/create-payment-link")
+async def create_payment_link(request: Request):
+    """
+    Create a Razorpay Payment Link — bypasses website domain restrictions.
+    User is redirected to razorpay.com to complete payment, then back to our site.
+    """
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        return JSONResponse({"error": "Payments not configured"}, status_code=503)
+
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    body = await request.json()
+    amount_inr = int(body.get("amount_inr", 0))
+    if amount_inr < 10:
+        return JSONResponse({"error": "Minimum recharge is ₹10"}, status_code=400)
+
+    # Encode user_id in callback URL so we know who paid
+    import urllib.parse
+    callback_url = body.get("callback_url", "")  # frontend passes its own origin
+
+    import razorpay
+    client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    link = client.payment_link.create({
+        "amount": amount_inr * 100,
+        "currency": "INR",
+        "description": f"Multi-Agent Debate System — ₹{amount_inr} top-up",
+        "customer": {
+            "email": body.get("email", ""),
+        },
+        "notify": {"email": False, "sms": False},
+        "reminder_enable": False,
+        "callback_url": f"{callback_url}/payment-return?uid={urllib.parse.quote(user_id)}&amount={amount_inr}",
+        "callback_method": "get",
+    })
+    return JSONResponse({"payment_url": link["short_url"]})
+
+
+@app.get("/payment-return")
+async def payment_return(request: Request):
+    """
+    Razorpay redirects here after payment link is completed.
+    Verifies payment and credits the user, then redirects back to app.
+    """
+    import razorpay, hmac, hashlib
+
+    params = dict(request.query_params)
+    payment_id = params.get("razorpay_payment_id", "")
+    payment_link_id = params.get("razorpay_payment_link_id", "")
+    payment_link_ref_id = params.get("razorpay_payment_link_reference_id", "")
+    payment_link_status = params.get("razorpay_payment_link_status", "")
+    signature = params.get("razorpay_signature", "")
+    user_id = params.get("uid", "")
+    amount_inr = int(params.get("amount", 0))
+
+    # Verify signature
+    payload = f"{payment_link_id}|{payment_link_ref_id}|{payment_link_status}|{payment_id}"
+    expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+    if payment_link_status == "paid" and hmac.compare_digest(expected, signature) and user_id and amount_inr > 0:
+        sb = get_sb_admin()
+        if sb:
+            try:
+                result = sb.table("user_credits").select("balance_paise").eq("user_id", user_id).execute()
+                add_paise = amount_inr * 100
+                if result.data:
+                    new_bal = result.data[0]["balance_paise"] + add_paise
+                    sb.table("user_credits").update({"balance_paise": new_bal}).eq("user_id", user_id).execute()
+                else:
+                    sb.table("user_credits").insert({"user_id": user_id, "balance_paise": add_paise}).execute()
+            except Exception as e:
+                logger.error(f"Payment link credit error: {e}")
+
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/?payment=success" if payment_link_status == "paid" else "/?payment=failed")
+
+
 @app.post("/verify-payment")
 async def verify_payment(request: Request):
     """Verify Razorpay payment signature and credit the user."""
