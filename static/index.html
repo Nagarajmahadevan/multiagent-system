@@ -365,7 +365,7 @@
       padding-bottom: max(18px, env(safe-area-inset-bottom));
     }
     .input-wrap {
-      display:flex; align-items:flex-end; gap:10px;
+      display:flex; align-items:center; gap:10px;
       background:var(--input-bg); border:1px solid #404040;
       border-radius:14px; padding:10px 10px 10px 15px;
       transition:border-color .2s; min-width:0;
@@ -373,14 +373,15 @@
     .input-wrap:focus-within { border-color:#60a5fa; }
     #user-input {
       flex:1; background:transparent; border:none; outline:none;
-      color:var(--text); font-size:14px; font-family:inherit;
-      resize:none; max-height:72px; min-height:22px; line-height:1.5;
+      color:var(--text); font-size:15px; font-family:inherit;
+      resize:none; max-height:72px; min-height:24px; line-height:1.5;
       overflow-y:hidden; transition:max-height .2s ease;
+      align-self:center;
     }
     #user-input.expanded { max-height:300px; overflow-y:auto; }
     #user-input::placeholder { color:var(--muted); }
     #expand-btn {
-      display:none; align-self:flex-end; margin-bottom:6px;
+      display:none; align-self:center;
       background:none; border:none; color:#60a5fa; font-size:11px;
       cursor:pointer; padding:0 2px; white-space:nowrap; flex-shrink:0;
       font-family:inherit;
@@ -1233,6 +1234,7 @@
   let running = false;
   let abortController = null;
   let currentRunStart = null; // first DOM node added in current run
+  let _keepTextAfterStop = false; // flag: don't clear textarea when user hit Stop
 
   const SEND_ICON = `<svg id="send-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1352,17 +1354,9 @@
             node = next;
           }
         }
-        if (!area.firstChild) buildWelcome();
+        if (!area.firstChild) area.appendChild(buildWelcome());
         setStatus('● Ready');
-        running = false;
-        ta.disabled = false;
-        setSendMode(false);
-        ta.value = idea;            // restore question so user can edit & retry
-        ta.style.height = 'auto';
-        ta.dispatchEvent(new Event('input'));
-        ta.focus();
-        currentRunStart = null;
-        abortController = null;
+        _keepTextAfterStop = true; // prevent finally from clearing textarea
         return;
       }
       if (e.message !== '__recharge__') setStatus('✕ ' + e.message, 'error');
@@ -1370,11 +1364,18 @@
       running = false;
       setSendMode(false);
       ta.disabled = false;
-      ta.value = '';
+      if (_keepTextAfterStop) {
+        // Restore the question text so user can edit & retry
+        _keepTextAfterStop = false;
+        ta.value = idea;
+      } else {
+        ta.value = '';
+      }
       ta.style.height = 'auto';
       ta.classList.remove('expanded');
       expandBtn.style.display = 'none';
       expandBtn.textContent = 'Read more';
+      ta.dispatchEvent(new Event('input')); // reset height properly
       currentRunStart = null;
       abortController = null;
       ta.focus();

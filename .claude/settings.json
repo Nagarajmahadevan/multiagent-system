@@ -29,7 +29,8 @@
       "WebFetch(domain:www.whois.com)",
       "WebFetch(domain:rdap.org)",
       "WebFetch(domain:pubapi.registry.google)",
-      "WebFetch(domain:who.is)"
+      "WebFetch(domain:who.is)",
+      "Bash(python3 -c \":*)"
     ]
   }
 }

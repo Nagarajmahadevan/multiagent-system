@@ -136,12 +136,16 @@ class APIClient:
             },
             "contents": [
                 {
+                    "role": "user",
                     "parts": [{"text": user_prompt}]
                 }
             ],
             "generationConfig": {
                 "maxOutputTokens": max_tokens,
                 "temperature": 0.7,
+                # Disable thinking for gemini-2.5-flash (thinking model) —
+                # avoids thinking-token overhead and unexpected thought parts in output.
+                "thinkingConfig": {"thinkingBudget": 0},
             },
         }
 
@@ -152,13 +156,23 @@ class APIClient:
         headers = {"Content-Type": "application/json"}
 
         resp = requests.post(url, json=payload, headers=headers, timeout=120)
+
+        # Log the full error body for easier debugging
+        if not resp.ok:
+            logger.error(
+                "Gemini API error %s: %s", resp.status_code, resp.text[:500]
+            )
         resp.raise_for_status()
         data = resp.json()
 
         content = ""
         if "candidates" in data and data["candidates"]:
             parts = data["candidates"][0].get("content", {}).get("parts", [])
-            content = "".join(p.get("text", "") for p in parts)
+            # Filter out "thought" parts (internal reasoning from gemini-2.5-flash)
+            content = "".join(
+                p.get("text", "") for p in parts
+                if not p.get("thought", False)
+            )
 
         usage = data.get("usageMetadata", {})
 
