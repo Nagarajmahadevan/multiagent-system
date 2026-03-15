@@ -1016,16 +1016,21 @@
   }
 
   function reset() {
-    totalCost = 0; totalIn = 0; totalOut = 0; doneCount = 0; ACTIVE_TOTAL = 10;
+    // Keep totalCost/totalIn/totalOut — they accumulate for the whole session
+    doneCount = 0; ACTIVE_TOTAL = 10;
     currentSummarizerOutput = '';
-    document.getElementById('total-cost').textContent = '₹ 0.00';
-    document.getElementById('total-tokens').textContent = '0 tokens';
     document.getElementById('progress-fill').style.width = '0%';
     Object.keys(AGENT_META).forEach(a => {
       dot(a, '');
       const row = document.getElementById('row-' + a);
       if (row) row.classList.remove('skipped');
     });
+  }
+
+  function resetSessionCost() {
+    totalCost = 0; totalIn = 0; totalOut = 0;
+    document.getElementById('total-cost').textContent = '₹ 0.00';
+    document.getElementById('total-tokens').textContent = '0 tokens';
   }
 
   // ── Conversation persistence (Supabase) ──────────────────────────────────
@@ -1138,6 +1143,7 @@
     currentSummarizerOutput = '';
     lastLayer = null;
     reset();
+    resetSessionCost();
     const area = chat();
     area.innerHTML = '';
     area.appendChild(buildWelcome());
