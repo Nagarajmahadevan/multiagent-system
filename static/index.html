@@ -1269,6 +1269,13 @@
     running = true;
     ta.disabled = true;
     setSendMode(true);
+    // Clear textarea immediately so user sees it was accepted
+    ta.value = '';
+    ta.style.height = 'auto';
+    ta.classList.remove('expanded');
+    expandBtn.style.display = 'none';
+    expandBtn.textContent = 'Read more';
+    ta.dispatchEvent(new Event('input'));
     currentIdea = idea;
     runId++;
     // Auto-close sidebar on mobile when query starts
@@ -1365,17 +1372,15 @@
       setSendMode(false);
       ta.disabled = false;
       if (_keepTextAfterStop) {
-        // Restore the question text so user can edit & retry
+        // Restore the question text so user can edit & retry after Stop
         _keepTextAfterStop = false;
         ta.value = idea;
-      } else {
-        ta.value = '';
+        ta.style.height = 'auto';
+        ta.classList.remove('expanded');
+        expandBtn.style.display = 'none';
+        expandBtn.textContent = 'Read more';
+        ta.dispatchEvent(new Event('input'));
       }
-      ta.style.height = 'auto';
-      ta.classList.remove('expanded');
-      expandBtn.style.display = 'none';
-      expandBtn.textContent = 'Read more';
-      ta.dispatchEvent(new Event('input')); // reset height properly
       currentRunStart = null;
       abortController = null;
       ta.focus();
