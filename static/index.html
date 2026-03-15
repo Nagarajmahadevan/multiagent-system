@@ -1488,13 +1488,14 @@
 
   // ── Supabase Auth ─────────────────────────────────────────────────────────
   let sbClient = null;
-  // Resolves once initAuth() finishes (success or failure)
-  let _authResolve;
-  const _authReady = new Promise(r => { _authResolve = r; });
 
   async function initAuth() {
     try {
-      const res = await fetch('/config');
+      // 8s timeout on config fetch — prevents hanging on slow networks
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch('/config', { signal: ctrl.signal });
+      clearTimeout(t);
       const cfg = await res.json();
 
       if (!cfg.supabase_url || !cfg.supabase_anon_key) {
@@ -1520,10 +1521,8 @@
       });
 
     } catch (e) {
-      // If config fetch fails, skip auth
-      document.getElementById('login-overlay').classList.add('hidden');
-    } finally {
-      _authResolve(); // unblock signInWithGoogle() regardless of outcome
+      // Config fetch failed or timed out — show login screen so user can retry
+      document.getElementById('login-overlay').classList.remove('hidden');
     }
   }
 
@@ -1558,22 +1557,38 @@
   async function signInWithGoogle() {
     const btn = document.getElementById('google-btn');
     const origHtml = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
-    await _authReady; // wait for initAuth() to finish if still running
-    if (!sbClient) {
-      // Auth not configured — restore button
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+
+    try {
+      // If sbClient isn't ready yet (slow network), initialize it now
+      if (!sbClient) {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        const res = await fetch('/config', { signal: ctrl.signal });
+        clearTimeout(t);
+        const cfg = await res.json();
+        if (cfg.supabase_url && cfg.supabase_anon_key) {
+          sbClient = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+        }
+      }
+
+      if (!sbClient) {
+        alert('Could not connect. Please refresh and try again.');
+        return;
+      }
+
+      const { error } = await sbClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) alert('Login error: ' + error.message);
+      // On success the browser redirects to Google — page unloads
+    } catch (e) {
+      alert('Connection failed. Please check your network and try again.');
+    } finally {
+      // Only restore if we're still on this page (i.e. redirect didn't happen)
       if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
-      return;
     }
-    const { error } = await sbClient.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    });
-    if (error) {
-      if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
-      alert('Login error: ' + error.message);
-    }
-    // On success the page redirects — no need to re-enable button
   }
 
   async function signOut() {
