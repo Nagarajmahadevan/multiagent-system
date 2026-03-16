@@ -2137,7 +2137,11 @@
           ? `Verd — ₹${selectedAmount} top-up`
           : `Verd — $${Math.round(selectedAmount / _INR_PER_USD)} top-up`,
         order_id: order.order_id,
-        prefill: { email: session?.user?.email || '' },
+        prefill: {
+          email: session?.user?.email || '',
+          contact: '9999999999',  // dummy — hides the "Enter mobile" screen
+        },
+        readonly: { contact: true, email: true },
         theme: { color: '#2563eb' },
         handler: async (response) => {
           const verifyRes = await fetch('/verify-payment', {
