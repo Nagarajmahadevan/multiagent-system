@@ -10,7 +10,10 @@ import asyncio
 import json
 import logging
 import os
+import smtplib
 import threading
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import yaml
@@ -34,6 +37,13 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 RAZORPAY_KEY_ID     = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 
+
+# ── Alert email config ────────────────────────────────────────────────────────
+ALERT_TO_EMAIL    = "nagarajmahadevanc@gmail.com"
+ALERT_SMTP_USER   = os.getenv("ALERT_SMTP_USER", "")      # e.g. your Gmail address
+ALERT_SMTP_PASS   = os.getenv("ALERT_SMTP_PASSWORD", "")  # Gmail App Password
+ALERT_SMTP_HOST   = os.getenv("ALERT_SMTP_HOST", "smtp.gmail.com")
+ALERT_SMTP_PORT   = int(os.getenv("ALERT_SMTP_PORT", "587"))
 
 # ── Credit config ─────────────────────────────────────────────────────────────
 SUPABASE_URL         = os.getenv("SUPABASE_URL", "")
@@ -124,6 +134,54 @@ def insert_analytics(
         }).execute()
     except Exception as e:
         logger.error(f"Analytics insert error: {e}")
+
+
+def get_user_email(user_id: str) -> str:
+    """Fetch the email address for a user from Supabase auth."""
+    sb = get_sb_admin()
+    if not sb or not user_id:
+        return "unknown"
+    try:
+        result = sb.auth.admin.get_user_by_id(user_id)
+        return result.user.email or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def send_alert_email(user_id: str, user_email: str, agent_name: str, error_msg: str, prompt: str):
+    """Send an alert email when an LLM agent fails."""
+    if not ALERT_SMTP_USER or not ALERT_SMTP_PASS:
+        logger.warning(
+            f"[ALERT] Agent failure (email not configured) — "
+            f"agent={agent_name}, user={user_email}, error={error_msg[:300]}"
+        )
+        return
+
+    subject = f"[Verd Alert] Agent failure: {agent_name}"
+    body = (
+        f"An LLM agent failed on Verd and the pipeline was stopped.\n\n"
+        f"Agent:        {agent_name}\n"
+        f"User ID:      {user_id}\n"
+        f"User Email:   {user_email}\n\n"
+        f"Error:\n{error_msg}\n\n"
+        f"Prompt (first 500 chars):\n{prompt[:500]}\n"
+    )
+
+    msg = MIMEMultipart()
+    msg["From"]    = ALERT_SMTP_USER
+    msg["To"]      = ALERT_TO_EMAIL
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(ALERT_SMTP_HOST, ALERT_SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(ALERT_SMTP_USER, ALERT_SMTP_PASS)
+            server.sendmail(ALERT_SMTP_USER, ALERT_TO_EMAIL, msg.as_string())
+        logger.info(f"Alert email sent — agent={agent_name}, user={user_email}")
+    except Exception as e:
+        logger.error(f"Failed to send alert email: {e}")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -429,6 +487,20 @@ async def run_pipeline(request: Request):
             if event.get("type") == "_internal_result":
                 # Internal only — capture and never forward to client
                 internal_result = event
+                continue
+
+            if event.get("type") == "pipeline_failed":
+                # Agent failure — send alert email and return user-friendly error
+                agent_name    = event.get("failed_agent", "unknown")
+                agent_display = event.get("failed_agent_display", agent_name)
+                error_msg     = event.get("error_message", "Unknown error")
+                user_email    = get_user_email(user_id) if user_id else "anonymous"
+                threading.Thread(
+                    target=send_alert_email,
+                    args=(user_id or "anonymous", user_email, agent_display, error_msg, idea),
+                    daemon=True,
+                ).start()
+                yield f"data: {json.dumps({'type': 'error', 'message': 'One of our AI providers is temporarily unavailable. Please try again in a few minutes.'})}\n\n"
                 continue
 
             yield f"data: {json.dumps(event)}\n\n"

@@ -153,6 +153,7 @@ class Pipeline:
 
         idx = 0
         halted = False
+        failed_agent_name = None
 
         for mode, agents_in_group in _EXECUTION_GROUPS:
             if halted:
@@ -173,6 +174,7 @@ class Pipeline:
                     self._run_single_agent(agent_name, user_idea, idx, total_agents, self._history, self._language)
                     if agent_name in self.errors and not self.continue_on_failure:
                         halted = True
+                        failed_agent_name = agent_name
                         break
 
             else:  # parallel
@@ -210,20 +212,32 @@ class Pipeline:
 
         elapsed = time.time() - start_time
 
-        _banner("PIPELINE COMPLETED")
-        _print(f"  Total time:  {elapsed:.1f}s")
-        _print(f"  Total cost:  INR {self.cost_tracker.total_cost_inr:.6f}")
-        _print(f"  Agents run:  {len([v for v in self.outputs.values() if v])}/{total_agents} succeeded")
-        if self.errors:
-            _print(f"  Errors:      {len(self.errors)} agent(s) had issues")
-
-        self._emit({
-            "type": "pipeline_complete",
-            "total_cost_inr": self.cost_tracker.total_cost_inr,
-            "total_input_tokens": self.cost_tracker.total_input_tokens,
-            "total_output_tokens": self.cost_tracker.total_output_tokens,
-            "elapsed": round(elapsed, 2),
-        })
+        if halted and failed_agent_name:
+            _banner("PIPELINE HALTED — AGENT FAILURE")
+            _print(f"  Failed agent: {failed_agent_name}")
+            _print(f"  Error: {self.errors.get(failed_agent_name, 'unknown')}")
+            _print(f"  Elapsed: {elapsed:.1f}s")
+            self._emit({
+                "type": "pipeline_failed",
+                "failed_agent": failed_agent_name,
+                "failed_agent_display": AGENT_DISPLAY_NAMES.get(failed_agent_name, failed_agent_name),
+                "error_message": self.errors.get(failed_agent_name, "Unknown error"),
+                "elapsed": round(elapsed, 2),
+            })
+        else:
+            _banner("PIPELINE COMPLETED")
+            _print(f"  Total time:  {elapsed:.1f}s")
+            _print(f"  Total cost:  INR {self.cost_tracker.total_cost_inr:.6f}")
+            _print(f"  Agents run:  {len([v for v in self.outputs.values() if v])}/{total_agents} succeeded")
+            if self.errors:
+                _print(f"  Errors:      {len(self.errors)} agent(s) had issues")
+            self._emit({
+                "type": "pipeline_complete",
+                "total_cost_inr": self.cost_tracker.total_cost_inr,
+                "total_input_tokens": self.cost_tracker.total_input_tokens,
+                "total_output_tokens": self.cost_tracker.total_output_tokens,
+                "elapsed": round(elapsed, 2),
+            })
 
         return {
             "outputs": self.outputs,
