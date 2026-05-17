@@ -193,15 +193,18 @@ class APIClient:
         api_key = get_api_key("openai", self.config)
         url = f"{self.base_urls['openai']}/chat/completions"
 
+        is_reasoning_model = model.startswith(("gpt-5", "o1", "o3", "o4"))
+
         payload = {
             "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "max_tokens": max_tokens,
-            "temperature": 0.7,
+            "max_completion_tokens": max_tokens,
         }
+        if not is_reasoning_model:
+            payload["temperature"] = 0.7
 
         headers = {
             "Authorization": f"Bearer {api_key}",
