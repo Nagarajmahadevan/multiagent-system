@@ -84,16 +84,16 @@ agents:
 # =============================================================================
 
 token_limits:
-  visionary: 1500
-  researcher: 2000
-  critic: 1500
-  defender: 1500
-  devils_advocate: 2000
-  context_distiller: 1500
-  mediator: 1500
-  architect: 2000
-  validator: 2000
-  summarizer: 1500
+  visionary: 3000
+  researcher: 3000
+  critic: 3000
+  defender: 3000
+  devils_advocate: 3000
+  context_distiller: 2500
+  mediator: 5000
+  architect: 5000
+  validator: 4000
+  summarizer: 4000
 
 
 # =============================================================================
