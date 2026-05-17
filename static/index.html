@@ -2232,12 +2232,18 @@
   // ── Supabase Auth ─────────────────────────────────────────────────────────
   let sbClient = null;
 
+  // Build /config URL, forwarding ?country=XX override if present in page URL.
+  function _configUrl() {
+    const ovr = new URLSearchParams(window.location.search).get('country');
+    return ovr ? `/config?country=${encodeURIComponent(ovr)}` : '/config';
+  }
+
   async function initAuth() {
     try {
       // 8s timeout on config fetch — prevents hanging on slow networks
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 8000);
-      const res = await fetch('/config', { signal: ctrl.signal });
+      const res = await fetch(_configUrl(), { signal: ctrl.signal });
       clearTimeout(t);
       const cfg = await res.json();
 
@@ -2321,7 +2327,7 @@
       if (!sbClient) {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 8000);
-        const res = await fetch('/config', { signal: ctrl.signal });
+        const res = await fetch(_configUrl(), { signal: ctrl.signal });
         clearTimeout(t);
         const cfg = await res.json();
         if (cfg.supabase_url && cfg.supabase_anon_key) {

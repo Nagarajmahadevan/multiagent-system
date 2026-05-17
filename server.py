@@ -102,10 +102,16 @@ CURRENCY_TO_INR_RATE = {
 
 def detect_country(request: "Request") -> str:
     """
-    Resolve the visitor's country code. Prefers Cloudflare's cf-ipcountry header
-    (set automatically on Cloudflare-fronted deployments); falls back to India
-    so existing flows are unaffected if no geo header is present.
+    Resolve the visitor's country code. Priority:
+      1. `?country=XX` URL query param  (manual override, for testing or
+         users who travel and want to pay in their home currency)
+      2. Cloudflare's cf-ipcountry header (set automatically on Cloudflare-
+         fronted deployments)
+      3. India fallback (existing flows are unaffected if no geo signal present)
     """
+    override = (request.query_params.get("country") or "").upper().strip()
+    if override and len(override) == 2 and override.isalpha():
+        return override
     cf = request.headers.get("cf-ipcountry", "").upper()
     if cf and cf not in ("", "XX", "T1"):
         return cf
