@@ -190,9 +190,11 @@
     }
     .agent-row {
       display: flex; align-items: center; gap: 8px;
-      padding: 5px 10px; margin: 0 4px; border-radius: 7px;
-      cursor: default; transition: background .15s;
+      padding: 5px 10px 5px 9px; margin: 0 4px; border-radius: 7px;
+      border-left: 3px solid transparent;
+      cursor: default; transition: background .15s, border-color .15s;
     }
+    .agent-row[style*="--agent-color"] { border-left-color: var(--agent-color); }
     .agent-row:hover { background: rgba(255,255,255,.04); }
     .dot {
       width: 7px; height: 7px; border-radius: 50%;
@@ -214,9 +216,9 @@
       margin-top: auto; padding: 14px;
       border-top: 1px solid #2e2e2e;
     }
-    .cost-label { font-size: 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
-    .cost-value { font-size: 22px; font-weight: 700; color: #4ade80; margin-top: 3px; }
-    .cost-tokens { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .cost-label  { font-size: 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; opacity:.7; }
+    .cost-value  { font-size: 13px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+    .cost-tokens { font-size: 10px; color: var(--muted); margin-top: 1px; opacity:.6; }
 
     /* ── Main ── */
     main {
@@ -224,7 +226,8 @@
       background: var(--bg);
     }
     #chat-area {
-      flex: 1; overflow-y: auto; padding: 28px 28px 16px;
+      flex: 1; overflow-y: auto;
+      padding: 28px max(28px, calc((100% - 760px) / 2)) 16px;
       scroll-behavior: smooth;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
@@ -256,13 +259,13 @@
     .cx-medium   { background: rgba(251,191,36,.12);  color: #fbbf24; }
     .cx-complex  { background: rgba(167,139,250,.12); color: #a78bfa; }
 
-    /* question bubble */
+    /* question bubble — muted; the user's own words don't compete with the agents' output */
     .q-bubble {
-      background: #1a3560; border:1px solid #1e40af;
+      background: #232229; border:1px solid #34323d;
       border-radius: 16px 16px 4px 16px;
       padding: 13px 17px; margin-bottom: 26px;
       max-width: 75%; margin-left: auto;
-      font-size: 14px; line-height: 1.6; color: #bfdbfe;
+      font-size: 14px; line-height: 1.6; color: var(--text);
     }
 
     /* layer separator */
@@ -277,9 +280,13 @@
 
     /* ── Agent card ── */
     .a-card {
-      background: var(--card-bg); border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-left: 3px solid var(--agent-color, var(--card-border));
       border-radius: 12px; margin-bottom: 14px;
-      overflow: hidden; animation: slideUp .3s ease;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,.25), 0 0 0 1px rgba(255,255,255,.015);
+      animation: slideUp .3s ease;
     }
     @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 
@@ -395,7 +402,8 @@
 
     /* ── Input area ── */
     #input-area {
-      padding:14px 20px 18px; border-top:1px solid #2e2e2e;
+      padding: 14px max(20px, calc((100% - 760px) / 2)) 18px;
+      border-top:1px solid #2e2e2e;
       background:var(--bg); flex-shrink:0;
       /* Push above Android nav bar / iPhone home indicator */
       padding-bottom: max(18px, env(safe-area-inset-bottom));
@@ -433,6 +441,10 @@
     #send-btn:disabled { opacity:.35; cursor:not-allowed; }
     #send-btn.stop-mode { background:#dc2626; }
     #send-btn.stop-mode:hover { background:#ef4444; }
+    .cost-hint {
+      font-size: 11px; color: var(--muted); opacity: .6;
+      margin-top: 6px; text-align: center; user-select: none;
+    }
 
     /* scrollbar */
     ::-webkit-scrollbar { width:5px; }
@@ -503,15 +515,16 @@
     }
     .newchat-btn:hover { border-color: #60a5fa; color: #60a5fa; }
     .balance-pill {
-      font-size: 12px; font-weight: 600;
+      font-size: 12px; font-weight: 500;
       padding: 3px 10px; border-radius: 999px;
-      background: rgba(74,222,128,.1); color: #4ade80;
-      border: 1px solid rgba(74,222,128,.25);
+      background: rgba(148,163,184,.08); color: var(--muted);
+      border: 1px solid rgba(148,163,184,.2);
       cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
     }
-    .balance-pill:hover { background: rgba(74,222,128,.18); }
-    .balance-pill.low { background: rgba(251,191,36,.1); color: #fbbf24; border-color: rgba(251,191,36,.25); }
-    .balance-pill.empty { background: rgba(248,113,113,.1); color: #f87171; border-color: rgba(248,113,113,.25); }
+    .balance-pill:hover { background: rgba(148,163,184,.16); color: var(--text); }
+    .balance-pill.low { background: rgba(251,191,36,.1); color: #fbbf24; border-color: rgba(251,191,36,.3); font-weight: 600; }
+    .balance-pill.empty { background: rgba(248,113,113,.12); color: #f87171; border-color: rgba(248,113,113,.35); font-weight: 600; }
 
     /* ── History panel (welcome screen) ── */
     .hist-panel {
@@ -985,21 +998,22 @@
       </svg>
     </button>
   </div>
+  <div class="cost-hint">Est. ₹10–60 per debate · 10 expert agents collaborate</div>
 </div>
 
 <script>
   // ── Config ────────────────────────────────────────────────────────────────
   const AGENT_META = {
-    visionary:          { emoji:'🔮', lc:'l1', layer:'Layer 1 — Exploration',     bio:'Explores radical possibilities others won’t' },
-    researcher:         { emoji:'🔬', lc:'l1', layer:'Layer 1 — Exploration',     bio:'Grounds every idea in real-world evidence' },
-    critic:             { emoji:'🔍', lc:'l2', layer:'Layer 2 — Debate',          bio:'Hunts for fatal flaws and hidden assumptions' },
-    defender:           { emoji:'🛡️', lc:'l2', layer:'Layer 2 — Debate',          bio:'Argues the strongest case for each option' },
-    devils_advocate:    { emoji:'😈', lc:'l2', layer:'Layer 2 — Debate',          bio:'Asks if you’re solving the wrong problem' },
-    context_distiller:  { emoji:'🗜️', lc:'lc', layer:'Layer 2.5 — Compression',   bio:'Compresses noise into signal' },
-    mediator:           { emoji:'⚖️', lc:'l3', layer:'Layer 3 — Resolution',      bio:'Finds where the agents actually agree' },
-    architect:          { emoji:'🏗️', lc:'l3', layer:'Layer 3 — Resolution',      bio:'Turns the verdict into a concrete plan' },
-    validator:          { emoji:'✅', lc:'l4', layer:'Layer 4 — Validation',      bio:'Stress-tests the final answer' },
-    summarizer:         { emoji:'📋', lc:'l4', layer:'Layer 4 — Final Output',    bio:'Delivers the verdict in plain language' },
+    visionary:          { emoji:'🔮', lc:'l1', layer:'Layer 1 — Exploration',     color:'#a78bfa', bio:'Explores radical possibilities others won’t' },
+    researcher:         { emoji:'🔬', lc:'l1', layer:'Layer 1 — Exploration',     color:'#2dd4bf', bio:'Grounds every idea in real-world evidence' },
+    critic:             { emoji:'🔍', lc:'l2', layer:'Layer 2 — Debate',          color:'#fb923c', bio:'Hunts for fatal flaws and hidden assumptions' },
+    defender:           { emoji:'🛡️', lc:'l2', layer:'Layer 2 — Debate',          color:'#38bdf8', bio:'Argues the strongest case for each option' },
+    devils_advocate:    { emoji:'😈', lc:'l2', layer:'Layer 2 — Debate',          color:'#ec4899', bio:'Asks if you’re solving the wrong problem' },
+    context_distiller:  { emoji:'🗜️', lc:'lc', layer:'Layer 2.5 — Compression',   color:'#94a3b8', bio:'Compresses noise into signal' },
+    mediator:           { emoji:'⚖️', lc:'l3', layer:'Layer 3 — Resolution',      color:'#f59e0b', bio:'Finds where the agents actually agree' },
+    architect:          { emoji:'🏗️', lc:'l3', layer:'Layer 3 — Resolution',      color:'#818cf8', bio:'Turns the verdict into a concrete plan' },
+    validator:          { emoji:'✅', lc:'l4', layer:'Layer 4 — Validation',      color:'#4ade80', bio:'Stress-tests the final answer' },
+    summarizer:         { emoji:'📋', lc:'l4', layer:'Layer 4 — Final Output',    color:'#fde68a', bio:'Delivers the verdict in plain language' },
   };
 
   const PROVIDER_CLASS = {
@@ -1015,15 +1029,17 @@
     'context_distiller', 'validator',
   ]);
 
-  // Apply agent bios as native hover-tooltips on every sidebar row.
-  // Reads from AGENT_META so bios stay defined in one place.
+  // Apply agent bios + signature colors to every sidebar row.
+  // Reads from AGENT_META so bios + colors stay defined in one place.
   function applyAgentBios() {
     document.querySelectorAll('.agent-row').forEach(row => {
       const dot = row.querySelector('.dot[id^="d-"]');
       if (!dot) return;
       const agent = dot.id.slice(2); // strip "d-"
       const meta = AGENT_META[agent];
-      if (meta?.bio) row.title = meta.bio;
+      if (!meta) return;
+      if (meta.bio) row.title = meta.bio;
+      if (meta.color) row.style.setProperty('--agent-color', meta.color);
     });
   }
 
@@ -1472,10 +1488,18 @@
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  function setStatus(txt, cls = '') {
+  let _statusGen = 0;
+  function setStatus(txt, cls = '', autoDismissMs = 0) {
     const el = document.getElementById('status-pill');
     el.textContent = txt;
     el.className = cls;
+    const gen = ++_statusGen;
+    if (autoDismissMs > 0) {
+      setTimeout(() => {
+        // Only revert if no newer setStatus has run.
+        if (gen === _statusGen) setStatus('● ' + t('statusReady'));
+      }, autoDismissMs);
+    }
   }
 
   function dot(agent, state) {
@@ -1677,6 +1701,7 @@
 
       const card = document.createElement('div');
       card.className = 'a-card is-final';
+      card.style.setProperty('--agent-color', AGENT_META.summarizer.color);
       card.innerHTML = `
         <div class="final-label">✨ ${t('finalAnswer')}</div>
         <div class="a-header" title="${AGENT_META.summarizer.bio}">
@@ -1752,6 +1777,7 @@
     const card = document.createElement('div');
     card.id = 'card-' + runId + '-' + agent;
     card.className = 'a-card running' + (isFinal ? ' is-final' : '');
+    if (m.color) card.style.setProperty('--agent-color', m.color);
 
     const pc = PROVIDER_CLASS[provider] || 'p-deepseek';
     const lc = (m.lc || 'l1') + '-badge';
@@ -1924,7 +1950,7 @@
         const chargedInr = (ev.total_cost_inr || totalCost) + MARKUP_INR;
         const displayCostFinal = totalCost + sessionMarkup;
         document.getElementById('total-cost').textContent = '₹ ' + displayCostFinal.toFixed(2);
-        setStatus(`✓ Done  ₹ ${chargedInr.toFixed(2)}  •  ${formatDuration(ev.elapsed)}`);
+        setStatus(`✓ Done  ₹ ${chargedInr.toFixed(2)}  •  ${formatDuration(ev.elapsed)}`, '', 10000);
         // Save this turn to history
         if (currentIdea && currentSummarizerOutput) {
           chatHistory.push({ q: currentIdea, a: currentSummarizerOutput });
