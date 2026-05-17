@@ -148,7 +148,7 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 MARKUP_INR           = 2.0    # ₹2 profit per query (not shown to user)
 MARKUP_PAISE         = 200    # same in paise
 MIN_BALANCE_PAISE    = 300    # minimum balance required to start a query
-FREE_CREDITS_PAISE   = 1000   # 1 free query worth of credits for new users
+FREE_CREDITS_PAISE   = 6000   # ₹60 free credit for new users (covers ~1 complex debate)
 
 _sb_admin = None
 
