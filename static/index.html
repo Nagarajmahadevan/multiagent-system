@@ -362,6 +362,37 @@
       letter-spacing:.08em; color:#a78bfa; padding:6px 15px 0;
     }
 
+    /* collapsible non-key agent cards */
+    .a-card.is-collapsible .a-header { cursor:pointer; user-select:none; }
+    .a-card.is-collapsible .a-header::after {
+      content:'▾'; margin-left:6px; color:var(--muted); font-size:11px;
+      transition:transform .15s ease;
+    }
+    .a-card.is-collapsed .a-header::after { transform:rotate(-90deg); }
+    .a-card.is-collapsed .a-body { display:none; }
+
+    /* expand-all toggle */
+    .expand-toggle {
+      display:inline-flex; align-items:center; gap:6px;
+      font-size:11px; color:var(--muted); cursor:pointer;
+      padding:5px 10px; border:1px solid #2e2e2e; border-radius:999px;
+      background:transparent; margin:8px 0 4px;
+    }
+    .expand-toggle:hover { color:var(--text); border-color:#3a3a3a; }
+
+    /* consensus badge — sits above the Summarizer card */
+    .consensus-badge {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px; margin:10px 0 0;
+      border-radius:10px; font-size:13px; font-weight:600;
+      border:1px solid;
+    }
+    .consensus-badge .cb-icon { font-size:16px; }
+    .consensus-badge .cb-meta { font-size:11px; font-weight:500; color:var(--muted); margin-left:auto; }
+    .consensus-strong   { background:rgba(74,222,128,.08);  border-color:rgba(74,222,128,.35);  color:#86efac; }
+    .consensus-moderate { background:rgba(250,204,21,.08);  border-color:rgba(250,204,21,.35);  color:#fde68a; }
+    .consensus-weak     { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.35); color:#fca5a5; }
+
     /* ── Input area ── */
     #input-area {
       padding:14px 20px 18px; border-top:1px solid #2e2e2e;
@@ -976,6 +1007,14 @@
     anthropic:'p-anthropic', openai:'p-openai',
   };
 
+  // Agents that collapse by default after completion — debate layer + plumbing.
+  // Mediator, Architect, Summarizer stay expanded (they contain the verdict).
+  const COLLAPSED_AGENTS = new Set([
+    'visionary', 'researcher',
+    'critic', 'defender', 'devils_advocate',
+    'context_distiller', 'validator',
+  ]);
+
   // Apply agent bios as native hover-tooltips on every sidebar row.
   // Reads from AGENT_META so bios stay defined in one place.
   function applyAgentBios() {
@@ -998,6 +1037,7 @@
   let chatHistory = [];
   let currentIdea = '';
   let currentSummarizerOutput = '';
+  let currentConsensus = null; // {count: int, strength: 'strong'|'moderate'|'weak'} parsed from Mediator
   let runId = 0; // increments each submit so card IDs are unique across runs
   let knownBalancePaise = 0; // last fetched balance from server
 
@@ -1480,12 +1520,39 @@
     // Keep totalCost/totalIn/totalOut — they accumulate for the whole session
     doneCount = 0; ACTIVE_TOTAL = 10;
     currentSummarizerOutput = '';
+    currentConsensus = null;
     document.getElementById('progress-fill').style.width = '0%';
     Object.keys(AGENT_META).forEach(a => {
       dot(a, '');
       const row = document.getElementById('row-' + a);
       if (row) row.classList.remove('skipped');
     });
+  }
+
+  // Parse the first line of Mediator output for `CONSENSUS: X/10 — <strength>`.
+  // Returns {count, strength, cleanedOutput} or null if no match (then output is unchanged).
+  function parseConsensus(rawOutput) {
+    if (!rawOutput) return null;
+    const m = rawOutput.match(/^\s*CONSENSUS:\s*(\d{1,2})\s*\/\s*10\s*[—–-]\s*(strong|moderate|weak)\b[^\n]*\n?/i);
+    if (!m) return null;
+    const count = Math.min(10, Math.max(1, parseInt(m[1], 10)));
+    const strength = m[2].toLowerCase();
+    const cleanedOutput = rawOutput.slice(m[0].length).trimStart();
+    return { count, strength, cleanedOutput };
+  }
+
+  function renderConsensusBadge(consensus) {
+    const cls = `consensus-${consensus.strength}`;
+    const label = consensus.strength === 'strong'   ? 'Strong consensus'
+                : consensus.strength === 'moderate' ? 'Moderate consensus'
+                : 'Weak consensus';
+    const div = document.createElement('div');
+    div.className = `consensus-badge ${cls}`;
+    div.innerHTML = `
+      <span class="cb-icon">⚖️</span>
+      <span>${label} — ${consensus.count} of 10 agents converged</span>
+      <span class="cb-meta">From the Mediator's synthesis</span>`;
+    return div;
   }
 
   function resetSessionCost() {
@@ -1532,18 +1599,52 @@
     try {
       const { data: { session } } = await sbClient.auth.getSession();
       if (!session) return;
-      if (!currentConvId) currentConvId = crypto.randomUUID();
+      const isFirstTurn = !currentConvId;
+      if (isFirstTurn) currentConvId = crypto.randomUUID();
       const { error } = await sbClient.from('conversations').upsert({
         id: currentConvId,
         user_id: session.user.id,
-        title: chatHistory[0].q.slice(0, 80),
+        title: chatHistory[0].q.slice(0, 80), // placeholder; refined async on first turn
         turns: chatHistory,
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
       await loadConversations(); // refresh list
+
+      // First turn only: replace truncated placeholder with an AI-generated title.
+      if (isFirstTurn) {
+        refineConversationTitle(currentConvId, session);
+      }
     } catch (e) {
       console.error('saveConversation:', e);
+    }
+  }
+
+  // Fire-and-forget: ask backend for a short title, then upsert it.
+  // Does not block the UI — sidebar refreshes once the title arrives.
+  async function refineConversationTitle(convId, session) {
+    if (!chatHistory.length) return;
+    const turn = chatHistory[chatHistory.length - 1];
+    try {
+      const resp = await fetch('/api/title', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ idea: turn.q, summary: turn.a }),
+      });
+      if (!resp.ok) return; // silently keep placeholder
+      const { title } = await resp.json();
+      if (!title) return;
+      const { error } = await sbClient.from('conversations').update({
+        title,
+        updated_at: new Date().toISOString(),
+      }).eq('id', convId);
+      if (error) throw error;
+      await loadConversations(); // refresh sidebar with new title
+    } catch (e) {
+      console.warn('refineConversationTitle:', e); // non-fatal
     }
   }
 
@@ -1682,10 +1783,26 @@
     if (!card) return;
     card.classList.remove('running');
 
+    // Mediator: extract CONSENSUS line, strip it from displayed content, stash for Summarizer.
+    let displayOutput = output;
+    if (agent === 'mediator') {
+      const parsed = parseConsensus(output);
+      if (parsed) {
+        currentConsensus = { count: parsed.count, strength: parsed.strength };
+        displayOutput = parsed.cleanedOutput;
+      }
+    }
+
+    // Summarizer: insert consensus badge just before this card, if we have one.
+    if (agent === 'summarizer' && currentConsensus) {
+      const badge = renderConsensusBadge(currentConsensus);
+      card.parentNode && card.parentNode.insertBefore(badge, card);
+    }
+
     const body = card.querySelector('.a-body');
     const md = document.createElement('div');
     md.className = 'md-out';
-    try { md.innerHTML = marked.parse(output); } catch { md.textContent = output; }
+    try { md.innerHTML = marked.parse(displayOutput); } catch { md.textContent = displayOutput; }
 
     const footer = document.createElement('div');
     footer.className = 'a-footer';
@@ -1698,6 +1815,16 @@
     body.innerHTML = '';
     body.appendChild(md);
     card.appendChild(footer);
+
+    // Collapse non-key agents by default after completion. Header acts as the toggle.
+    if (COLLAPSED_AGENTS.has(agent)) {
+      card.classList.add('is-collapsible', 'is-collapsed');
+      const header = card.querySelector('.a-header');
+      if (header && !header.dataset.toggleBound) {
+        header.dataset.toggleBound = '1';
+        header.addEventListener('click', () => card.classList.toggle('is-collapsed'));
+      }
+    }
   }
 
   function errorCard(agent, error) {
@@ -1707,6 +1834,17 @@
     card.style.borderColor = '#f8717166';
     const body = card.querySelector('.a-body');
     body.innerHTML = `<p style="color:#f87171;font-size:13px">❌ ${error}</p>`;
+  }
+
+  // Toggle every collapsible agent card on the page.
+  function toggleAllAgents(btn) {
+    const expanded = btn.dataset.expanded === 'true';
+    const next = !expanded;
+    document.querySelectorAll('.a-card.is-collapsible').forEach(card => {
+      card.classList.toggle('is-collapsed', !next);
+    });
+    btn.dataset.expanded = String(next);
+    btn.textContent = next ? 'Collapse debate' : 'Expand full debate';
   }
 
   // ── Layer separator ───────────────────────────────────────────────────────
@@ -1744,6 +1882,7 @@
           <span class="cx-badge cx-${cx}">${labels[cx]}</span>
           <span>Query complexity — running <strong>${counts[cx]}</strong></span>
           ${ev.skipped_agents.length ? `<span style="color:#555">· ${ev.skipped_agents.map(a=>AGENT_META[a]?.emoji+' '+a).join(', ')} skipped</span>` : ''}
+          <button class="expand-toggle" style="margin-left:auto" data-expanded="false" onclick="toggleAllAgents(this)">Expand full debate</button>
         `;
         chat().appendChild(banner);
         break;

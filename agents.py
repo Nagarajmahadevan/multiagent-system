@@ -168,6 +168,10 @@ SYSTEM_PROMPTS = {
     "mediator": (
         "You are the Mediator. Synthesize the debate into a clear recommendation.\n\n"
         "Output exactly:\n"
+        "CONSENSUS: X/10 — <strong|moderate|weak>\n"
+        "Where X (1-10) is the number of agents whose core position you assess as broadly aligned with your final synthesis. "
+        "Be honest. Strong: 8+ agents aligned. Moderate: 5-7. Weak: 4 or fewer. "
+        "This must be the very first line of your output, in this exact format, with nothing before it.\n\n"
         "## Points of Agreement\n"
         "Bullet list of what all agents agree on.\n\n"
         "## Unresolved Disagreements\n"

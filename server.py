@@ -404,6 +404,57 @@ def llms():
     return HTMLResponse((static_dir / "llms.txt").read_text(), media_type="text/plain")
 
 
+@app.post("/api/title")
+async def generate_title(request: Request):
+    """
+    Generate a short 4-6 word title for a completed conversation.
+    Uses deepseek-chat (cheapest model) — costs roughly ₹0.05 per call.
+    Auth required: only logged-in users can hit this.
+    """
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    user_id = get_user_id_from_token(token)
+    if SUPABASE_SERVICE_KEY and not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    body = await request.json()
+    idea = (body.get("idea") or "").strip()
+    summary = (body.get("summary") or "").strip()
+    if not idea:
+        return JSONResponse({"error": "No idea provided"}, status_code=400)
+
+    # Truncate to keep the title call cheap and predictable.
+    idea_snip = idea[:600]
+    summary_snip = summary[:1200]
+
+    system_prompt = (
+        "You generate concise titles for AI chat conversations. "
+        "Return a 4–6 word title in Title Case, no quotes, no punctuation, no trailing period. "
+        "Capture the topic, not the verb. Examples: 'NIFTY Options Strategy Review', "
+        "'Multi-Agent System UX Audit', 'Indian Tax Filing Edge Cases'."
+    )
+    user_prompt = (
+        f"User question:\n{idea_snip}\n\n"
+        f"Final answer (excerpt):\n{summary_snip}\n\n"
+        "Return only the title text. Nothing else."
+    )
+
+    try:
+        config = yaml.safe_load(Path("config.yaml").read_text())
+        from api_client import APIClient
+        client = APIClient(config)
+        # Direct deepseek-chat call — bypass agent registry so cost is minimal.
+        result = client._call_deepseek("deepseek-chat", system_prompt, user_prompt, max_tokens=40)
+        title = (result.get("content") or "").strip().strip('"').strip("'")
+        # Defensive cap — never let it return a runaway title.
+        title = title.splitlines()[0][:80] if title else ""
+        if not title:
+            return JSONResponse({"error": "empty_title"}, status_code=502)
+        return JSONResponse({"title": title})
+    except Exception as exc:
+        logger.exception("Title generation failed")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 @app.post("/run")
 async def run_pipeline(request: Request):
     """
