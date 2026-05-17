@@ -2306,6 +2306,15 @@
     return ovr ? `/config?country=${encodeURIComponent(ovr)}` : '/config';
   }
 
+  // Append ?country=XX to any path if the URL override is set — used so that
+  // backend payment endpoints see the same simulated geography as /config did.
+  function _withCountryOverride(path) {
+    const ovr = new URLSearchParams(window.location.search).get('country');
+    if (!ovr) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}country=${encodeURIComponent(ovr)}`;
+  }
+
   async function initAuth() {
     try {
       // 8s timeout on config fetch — prevents hanging on slow networks
@@ -2509,7 +2518,7 @@
       } else {
         payload = { custom_amount: selectedAmount };
       }
-      const orderRes = await fetch('/create-order', {
+      const orderRes = await fetch(_withCountryOverride('/create-order'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(payload),
