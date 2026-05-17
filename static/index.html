@@ -243,7 +243,27 @@
     #welcome h2  { font-size: 26px; font-weight:700; color:var(--text); margin-bottom:8px; }
     #welcome p   { font-size: 14px; line-height:1.6; max-width:380px; }
     .agent-tags  { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:18px; max-width:480px; }
-    .agent-tag   { font-size:11px; padding:3px 10px; border-radius:999px; border:1px solid #3a3a3a; color:var(--muted); cursor:default; }
+    .agent-tag {
+      font-size:11px; padding:3px 10px; border-radius:999px;
+      border:1px solid #3a3a3a; color:var(--muted); cursor:pointer;
+      transition: background .15s, border-color .15s, color .15s;
+      user-select: none;
+    }
+    .agent-tag:hover, .agent-tag.active {
+      background: rgba(255,255,255,.06); color: var(--text);
+      border-color: #555;
+    }
+    /* The inline bio reveal — sits below the agent-tags row */
+    .agent-bio {
+      display: none; max-width: 480px; margin: 12px auto 0;
+      padding: 8px 14px; border-radius: 10px;
+      background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.2);
+      font-size: 13px; line-height: 1.5; color: var(--text);
+      text-align: center; min-height: 38px;
+    }
+    .agent-bio.open { display: block; animation: fadeIn .15s ease; }
+    .agent-bio strong { color: #fde68a; margin-right: 6px; }
+    @keyframes fadeIn { from {opacity:0; transform:translateY(-3px)} to {opacity:1; transform:translateY(0)} }
 
     /* Suggested-prompt chips — anchor first-time users to high-value questions */
     .prompt-chips {
@@ -256,10 +276,23 @@
       background: rgba(251,191,36,.04); border: 1px solid rgba(251,191,36,.18);
       color: var(--text); cursor: pointer;
       transition: background .15s, border-color .15s, transform .1s;
-      text-align: left;
+      text-align: left; flex-shrink: 0;
     }
     .prompt-chip:hover   { background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.35); }
     .prompt-chip:active  { transform: translateY(1px); }
+    /* Mobile: chips become a single horizontally-scrollable strip — the
+       same pattern used by ChatGPT mobile, Perplexity, etc. */
+    @media (max-width: 768px) {
+      .prompt-chips {
+        flex-wrap: nowrap; justify-content: flex-start;
+        overflow-x: auto; -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x mandatory;
+        padding: 0 16px 4px; margin-left: -16px; margin-right: -16px;
+        max-width: none; scrollbar-width: none;
+      }
+      .prompt-chips::-webkit-scrollbar { display: none; }
+      .prompt-chip { scroll-snap-align: start; min-width: 220px; max-width: 75vw; }
+    }
 
     /* complexity banner */
     .complexity-banner {
@@ -689,9 +722,29 @@
     }
     #sidebar-backdrop.open { display: block; }
 
+    /* Drawer-only "+ New Chat" — hidden on desktop, primary CTA on mobile */
+    .drawer-newchat { display: none; }
+
     /* ── Mobile styles (≤768px) ── */
     @media (max-width: 768px) {
       #menu-btn { display: flex; align-items: center; justify-content: center; }
+
+      /* Drawer "+ New Chat" — gold-accent primary action at top of drawer */
+      .drawer-newchat {
+        display: block; width: calc(100% - 16px); margin: 12px 8px 4px;
+        padding: 11px 14px; border-radius: 10px;
+        background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.35);
+        color: #fde68a; font: inherit; font-weight: 600; font-size: 14px;
+        cursor: pointer; min-height: 44px;
+        transition: background .15s, border-color .15s;
+      }
+      .drawer-newchat:hover, .drawer-newchat:active {
+        background: rgba(251,191,36,.18); border-color: rgba(251,191,36,.55);
+      }
+
+      /* Hide the persistent cost meter inside the mobile drawer —
+         vertical space is precious; cost surfaces via post-query toast. */
+      .sidebar-cost { display: none; }
 
       header { padding: 0 12px; gap: 8px; }
       header h1 { font-size: 13px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -945,6 +998,10 @@
 
   <!-- ── Sidebar ── -->
   <aside id="sidebar">
+    <!-- Mobile-only "+ New Chat" CTA at the top of the drawer -->
+    <button class="drawer-newchat" onclick="newChat(); toggleSidebar(false);">
+      + New Chat
+    </button>
     <!-- Conversation history -->
     <div class="conv-section">
       <div class="sidebar-title" data-i18n="history">History</div>
@@ -1841,11 +1898,23 @@
     ta.dispatchEvent(new Event('input', { bubbles: true })); // re-triggers auto-grow
   }
 
+  // Tap an agent pill in the empty state → reveal its bio in the row below.
+  function revealAgentBio(agentKey, el) {
+    const meta = AGENT_META[agentKey];
+    if (!meta) return;
+    const bio = document.getElementById('agent-bio-reveal');
+    if (!bio) return;
+    document.querySelectorAll('.agent-tag.active').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    bio.innerHTML = `<strong>${meta.emoji} ${_AGENT_DISPLAY[agentKey]}</strong>${meta.bio}`;
+    bio.classList.add('open');
+  }
+
   function buildWelcome() {
     const w = document.createElement('div');
     w.id = 'welcome';
     const tags = Object.entries(AGENT_META).map(([key, m]) =>
-      `<span class="agent-tag" title="${m.bio}">${m.emoji} ${_AGENT_DISPLAY[key]}</span>`
+      `<span class="agent-tag" title="${m.bio}" onclick="revealAgentBio('${key}', this)">${m.emoji} ${_AGENT_DISPLAY[key]}</span>`
     ).join('');
     const chips = _SUGGESTED_PROMPTS.map(p =>
       `<button class="prompt-chip" type="button" onclick="useSuggestedPrompt(this.dataset.p)" data-p="${p.replace(/"/g,'&quot;')}">${p}</button>`
@@ -1855,6 +1924,7 @@
       <h2>${t('heroTitle')}</h2>
       <p>${t('heroDesc')}</p>
       <div class="agent-tags">${tags}</div>
+      <div class="agent-bio" id="agent-bio-reveal"></div>
       <div class="prompt-chips">${chips}</div>`;
     return w;
   }
