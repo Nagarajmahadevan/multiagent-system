@@ -100,6 +100,14 @@ CURRENCY_TO_INR_RATE = {
     "JPY": 0.55, "CHF": 90.0, "SEK": 8.0, "NOK": 7.6, "DKK": 11.8,
 }
 
+# Minimum custom-amount per currency. Roughly equivalent to ₹100 at our display
+# rates, with a sensible floor (small charges get eaten by card fees).
+MIN_CUSTOM_AMOUNT = {
+    "INR": 100, "USD": 2, "EUR": 2, "GBP": 2, "CAD": 3, "AUD": 3, "NZD": 3,
+    "SGD": 3, "AED": 8, "MYR": 10, "ZAR": 35, "JPY": 200, "CHF": 2,
+    "SEK": 20, "NOK": 20, "DKK": 15,
+}
+
 def detect_country(request: "Request") -> str:
     """
     Resolve the visitor's country code. Priority:
@@ -289,18 +297,23 @@ def get_config(request: Request):
         "locale": locale_for_country(country),
         "display_rate": CURRENCY_TO_INR_RATE.get(currency, 1.0),  # paise/100 -> display_currency
         "tiers": tiers_for_currency(currency),
+        "min_custom": MIN_CUSTOM_AMOUNT.get(currency, 2.0),
     })
 
 
 def _resolve_tier(request: "Request", body: dict):
     """Resolve a top-up request into (display_amount, display_currency,
-    credit_paise). Two paths:
-      - tier_index → look up the server's tier list (authoritative)
+    credit_paise). Three paths:
+      - tier_index → server's tier list (authoritative)
       - amount_inr → INR-only custom amount, ₹100 minimum (legacy)
+      - custom_amount → custom amount in user's detected currency
     """
     country = detect_country(request)
     currency = currency_for_country(country)
     tiers = tiers_for_currency(currency)
+    minor_unit = 1 if currency == "JPY" else 100
+
+    # Path 1: tier index
     idx_raw = body.get("tier_index", None)
     if idx_raw is not None and idx_raw != -1:
         try:
@@ -310,7 +323,6 @@ def _resolve_tier(request: "Request", body: dict):
         if idx < 0 or idx >= len(tiers):
             return None, "Invalid tier"
         tier = tiers[idx]
-        minor_unit = 1 if currency == "JPY" else 100
         return {
             "display_amount": tier["display_amount"],
             "display_currency": currency,
@@ -318,21 +330,44 @@ def _resolve_tier(request: "Request", body: dict):
             "credit_paise": int(tier["credit_paise"]),
         }, None
 
-    # Legacy custom-amount path. Only allowed for INR users.
-    if currency != "INR":
-        return None, "Custom amounts not available in your region — please choose a tier"
-    try:
-        amount_inr = int(body.get("amount_inr", 0))
-    except (TypeError, ValueError):
-        amount_inr = 0
-    if amount_inr < 100:
-        return None, "Minimum recharge is ₹100"
-    return {
-        "display_amount": amount_inr,
-        "display_currency": "INR",
-        "amount_minor": amount_inr * 100,
-        "credit_paise": amount_inr * 100,
-    }, None
+    # Path 2: legacy amount_inr (INR users only — kept for backwards compat)
+    if "amount_inr" in body and currency == "INR":
+        try:
+            amount_inr = int(body.get("amount_inr", 0))
+        except (TypeError, ValueError):
+            amount_inr = 0
+        if amount_inr < 100:
+            return None, "Minimum recharge is ₹100"
+        return {
+            "display_amount": amount_inr,
+            "display_currency": "INR",
+            "amount_minor": amount_inr * 100,
+            "credit_paise": amount_inr * 100,
+        }, None
+
+    # Path 3: custom_amount in the user's regional currency
+    if "custom_amount" in body:
+        try:
+            amount = float(body.get("custom_amount", 0))
+        except (TypeError, ValueError):
+            amount = 0
+        min_amount = MIN_CUSTOM_AMOUNT.get(currency, 2.0)
+        if amount < min_amount:
+            return None, f"Minimum recharge is {currency} {min_amount}"
+        # Credit conversion: amount × display_rate × 100 (paise) × 0.95 (5% buffer
+        # for Razorpay's international card fee + FX volatility).
+        rate = CURRENCY_TO_INR_RATE.get(currency, 1.0)
+        credit_paise = int(round(amount * rate * 100 * 0.95))
+        return {
+            "display_amount": amount,
+            "display_currency": currency,
+            "amount_minor": int(round(amount * minor_unit)),
+            "credit_paise": credit_paise,
+        }, None
+
+    return None, "No amount specified"
+
+
 
 
 @app.post("/create-order")

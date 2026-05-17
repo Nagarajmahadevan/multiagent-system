@@ -1099,6 +1099,7 @@
     country: 'IN', currency: 'INR', locale: 'en-IN',
     display_rate: 1.0,  // paise/100 * display_rate^-1 -> display currency amount
     tiers: [],          // populated from server
+    min_custom: 100,    // smallest accepted custom amount in the user's currency
   };
 
   // Convert an INR-rupees amount to a localized currency string in the user's
@@ -1474,14 +1475,11 @@
       sym.textContent = symPart ? symPart.value : REGION.currency;
     } catch { sym.textContent = REGION.currency; }
 
-    // Custom-amount input: allow only for INR (international users pick tiers)
-    if (REGION.currency === 'INR') {
-      inp.style.display = '';
-      inp.min = 100;
-      inp.placeholder = `Custom amount (min ${formatTier(100)})`;
-    } else {
-      inp.style.display = 'none';
-    }
+    // Custom-amount input: available in every currency, with region-aware min.
+    inp.style.display = '';
+    inp.min = REGION.min_custom;
+    inp.step = REGION.currency === 'JPY' ? 1 : (REGION.currency === 'INR' ? 1 : 0.01);
+    inp.placeholder = `Custom amount (min ${formatTier(REGION.min_custom)})`;
 
     note.textContent = t('paymentNote');
     grid.innerHTML = tiers.map((tier, idx) =>
@@ -2255,6 +2253,7 @@
           locale: cfg.locale || 'en-IN',
           display_rate: cfg.display_rate || 1.0,
           tiers: cfg.tiers || [],
+          min_custom: cfg.min_custom || 2,
         };
         applyRegionUI();
       }
@@ -2404,17 +2403,20 @@
   }
 
   function onCustomAmount() {
-    // Only used for INR users — international users pick tiers only.
-    if (REGION.currency !== 'INR') return;
     const val = parseFloat(document.getElementById('custom-amount').value);
     selectedTierIndex = -1;
-    selectedAmount = (val >= 100) ? Math.round(val) : 0;
-    document.getElementById('pay-btn').disabled = selectedAmount < 100;
+    // INR rounds to whole rupees; non-INR keeps decimals for cents/pence/etc.
+    if (REGION.currency === 'INR') {
+      selectedAmount = (val >= REGION.min_custom) ? Math.round(val) : 0;
+    } else {
+      selectedAmount = (val >= REGION.min_custom) ? val : 0;
+    }
+    document.getElementById('pay-btn').disabled = selectedAmount < REGION.min_custom;
     document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
   }
 
   async function startPayment() {
-    if (selectedTierIndex < 0 && selectedAmount < 100) return;
+    if (selectedTierIndex < 0 && selectedAmount < REGION.min_custom) return;
     await _startRazorpay();
   }
 
@@ -2425,9 +2427,18 @@
     try {
       const { data: { session } } = await sbClient.auth.getSession();
       const token = session?.access_token || '';
-      const payload = (selectedTierIndex >= 0)
-        ? { tier_index: selectedTierIndex }
-        : { amount_inr: selectedAmount };  // INR custom-amount fallback
+      // Build the payment payload:
+      //  - tier_index   → server picks one of its pre-defined tiers (preferred)
+      //  - amount_inr   → legacy INR-only custom amount path
+      //  - custom_amount → custom amount in the user's regional currency
+      let payload;
+      if (selectedTierIndex >= 0) {
+        payload = { tier_index: selectedTierIndex };
+      } else if (REGION.currency === 'INR') {
+        payload = { amount_inr: selectedAmount };
+      } else {
+        payload = { custom_amount: selectedAmount };
+      }
       const orderRes = await fetch('/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
