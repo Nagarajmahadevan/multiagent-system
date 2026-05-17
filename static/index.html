@@ -1093,6 +1093,41 @@
   let runId = 0; // increments each submit so card IDs are unique across runs
   let knownBalancePaise = 0; // last fetched balance from server
 
+  // Region settings populated from /config (server-side geo-detection).
+  // Defaults are India until /config returns — keeps existing INR users unaffected.
+  let REGION = {
+    country: 'IN', currency: 'INR', locale: 'en-IN',
+    display_rate: 1.0,  // paise/100 * display_rate^-1 -> display currency amount
+    tiers: [],          // populated from server
+  };
+
+  // Convert an INR-rupees amount to a localized currency string in the user's
+  // display currency. For Indian users this is identity; for non-INR it divides
+  // by the fixed buffered rate (so a ₹500 internal credit shows as e.g. "$6.25").
+  function formatMoney(inrRupees, opts = {}) {
+    const currency = opts.currency || REGION.currency;
+    const locale = opts.locale || REGION.locale;
+    const display = inrRupees / (REGION.display_rate || 1);
+    const fmt = { style: 'currency', currency };
+    if (opts.decimals !== undefined) {
+      fmt.minimumFractionDigits = opts.decimals;
+      fmt.maximumFractionDigits = opts.decimals;
+    }
+    try { return new Intl.NumberFormat(locale, fmt).format(display); }
+    catch { return `${currency} ${display.toFixed(opts.decimals ?? 2)}`; }
+  }
+
+  // Format a pricing-tier display amount (already denominated in user's
+  // currency on the server — no conversion).
+  function formatTier(displayAmount) {
+    try {
+      return new Intl.NumberFormat(REGION.locale, {
+        style: 'currency', currency: REGION.currency,
+        minimumFractionDigits: 0, maximumFractionDigits: 0,
+      }).format(displayAmount);
+    } catch { return `${REGION.currency} ${displayAmount}`; }
+  }
+
   // Supabase conversation persistence
   let currentConvId = null;   // UUID of the active conversation row
   let allConversations = [];  // [{id, title, turns, updated_at}] — loaded on login
@@ -1408,44 +1443,54 @@
   }
 
   // ── Payment setup — Razorpay for everyone (international cards enabled in dashboard) ──
-  const _INR_PER_USD = 84; // conversion rate for display only
-  const _isIndiaUser = _locale.isIndia;
 
-  // India packs: INR amounts. International packs: USD display → converted to INR for Razorpay.
-  const _INDIA_PACKS = [
-    { display: '₹10',    inr: 10,   label: t('starter') },
-    { display: '₹500',   inr: 500,  label: t('popular') },
-    { display: '₹1,000', inr: 1000, label: t('bestValue') },
-  ];
-  const _INTL_PACKS = [
-    { display: '$1',  inr: Math.round(1  * _INR_PER_USD), label: t('starter') },
-    { display: '$5',  inr: Math.round(5  * _INR_PER_USD), label: t('popular') },
-    { display: '$10', inr: Math.round(10 * _INR_PER_USD), label: t('bestValue') },
-  ];
+  // Apply region-detected UI updates that need to render immediately
+  // (before login, before opening recharge): the pre-query cost-hint.
+  function applyRegionUI() {
+    const hint = document.querySelector('.cost-hint');
+    if (hint) {
+      // The INR estimate range was ₹10–60 per debate. Convert to display
+      // currency using the same buffered rate the rest of the UI uses.
+      const lo = formatMoney(10, { decimals: REGION.currency === 'INR' ? 0 : 2 });
+      const hi = formatMoney(60, { decimals: REGION.currency === 'INR' ? 0 : 2 });
+      hint.textContent = `Est. ${lo}–${hi} per debate · 10 expert agents collaborate`;
+    }
+  }
 
   function setupRechargeModal() {
-    const grid  = document.getElementById('pack-grid');
-    const note  = document.getElementById('payment-note');
-    const inp   = document.getElementById('custom-amount');
-    const sym   = document.getElementById('currency-symbol');
-    const packs = _isIndiaUser ? _INDIA_PACKS : _INTL_PACKS;
+    const grid = document.getElementById('pack-grid');
+    const note = document.getElementById('payment-note');
+    const inp  = document.getElementById('custom-amount');
+    const sym  = document.getElementById('currency-symbol');
+    const tiers = (REGION.tiers && REGION.tiers.length)
+      ? REGION.tiers
+      : [{ display_amount: 500, label_key: 'popular' }]; // safety fallback
 
-    if (_isIndiaUser) {
-      sym.textContent = '₹';
-      inp.min = 10;
-      inp.placeholder = 'Custom amount (min ₹10)';
+    // Currency symbol on the custom-amount field
+    try {
+      const parts = new Intl.NumberFormat(REGION.locale, { style: 'currency', currency: REGION.currency })
+        .formatToParts(0);
+      const symPart = parts.find(p => p.type === 'currency');
+      sym.textContent = symPart ? symPart.value : REGION.currency;
+    } catch { sym.textContent = REGION.currency; }
+
+    // Custom-amount input: allow only for INR (international users pick tiers)
+    if (REGION.currency === 'INR') {
+      inp.style.display = '';
+      inp.min = 100;
+      inp.placeholder = `Custom amount (min ${formatTier(100)})`;
     } else {
-      sym.textContent = '$';
-      inp.min = 1;
-      inp.placeholder = 'Custom amount in USD (min $1)';
+      inp.style.display = 'none';
     }
+
     note.textContent = t('paymentNote');
-    grid.innerHTML = packs.map(p =>
-      `<button class="pack-btn" onclick="selectPack(${p.inr}, this)">
-        <div class="pack-amount">${p.display}</div>
-        <div class="pack-label">${p.label}</div>
+    grid.innerHTML = tiers.map((tier, idx) =>
+      `<button class="pack-btn" onclick="selectPack(${idx}, this)">
+        <div class="pack-amount">${formatTier(tier.display_amount)}</div>
+        <div class="pack-label">${t(tier.label_key) || ''}</div>
        </button>`
     ).join('');
+    selectedTierIndex = -1;
     selectedAmount = 0;
     inp.value = '';
     document.getElementById('pay-btn').disabled = true;
@@ -1559,16 +1604,16 @@
   function addCost(costInr, inTok, outTok) {
     totalCost += costInr; totalIn += inTok; totalOut += outTok;
     const displayCost = totalCost + sessionMarkup;
-    document.getElementById('total-cost').textContent = '₹ ' + displayCost.toFixed(2);
+    document.getElementById('total-cost').textContent = formatMoney(displayCost);
     document.getElementById('total-tokens').textContent =
-      (totalIn + totalOut).toLocaleString() + ' ' + t('tokens');
+      (totalIn + totalOut).toLocaleString(REGION.locale) + ' ' + t('tokens');
     // Update balance pill in real-time as session cost accumulates
     if (knownBalancePaise > 0) {
       const projectedPaise = Math.max(0, knownBalancePaise - Math.round(totalCost * 100));
       const projectedInr = projectedPaise / 100;
       const pill = document.getElementById('balance-pill');
       if (pill) {
-        pill.textContent = `₹ ${projectedInr.toFixed(2)}`;
+        pill.textContent = formatMoney(projectedInr);
         pill.classList.remove('low', 'empty');
         if (projectedInr <= 0) pill.classList.add('empty');
         else if (projectedInr < 20) pill.classList.add('low');
@@ -1617,7 +1662,7 @@
 
   function resetSessionCost() {
     totalCost = 0; totalIn = 0; totalOut = 0; sessionMarkup = 0;
-    document.getElementById('total-cost').textContent = '₹ 0.00';
+    document.getElementById('total-cost').textContent = formatMoney(0);
     document.getElementById('total-tokens').textContent = '0 ' + t('tokens');
   }
 
@@ -1891,7 +1936,7 @@
     footer.innerHTML = `
       <span class="f-stat">📥 ${inTok.toLocaleString()} in</span>
       <span class="f-stat">📤 ${outTok.toLocaleString()} out</span>
-      <span class="f-stat">💰 <span class="f-cost">₹ ${costInr.toFixed(2)}</span></span>
+      <span class="f-stat">💰 <span class="f-cost">${formatMoney(costInr)}</span></span>
       <span class="f-stat">⏱ ${formatDuration(elapsed)}</span>`;
 
     body.innerHTML = '';
@@ -2005,8 +2050,8 @@
         sessionMarkup += MARKUP_INR;
         const chargedInr = (ev.total_cost_inr || totalCost) + MARKUP_INR;
         const displayCostFinal = totalCost + sessionMarkup;
-        document.getElementById('total-cost').textContent = '₹ ' + displayCostFinal.toFixed(2);
-        setStatus(`✓ Done  ₹ ${chargedInr.toFixed(2)}  •  ${formatDuration(ev.elapsed)}`, '', 10000);
+        document.getElementById('total-cost').textContent = formatMoney(displayCostFinal);
+        setStatus(`✓ Done  ${formatMoney(chargedInr)}  •  ${formatDuration(ev.elapsed)}`, '', 10000);
         // Save this turn to history
         if (currentIdea && currentSummarizerOutput) {
           chatHistory.push({ q: currentIdea, a: currentSummarizerOutput });
@@ -2196,6 +2241,18 @@
       clearTimeout(t);
       const cfg = await res.json();
 
+      // Capture region info from server geo-detection
+      if (cfg.currency) {
+        REGION = {
+          country: cfg.country || 'IN',
+          currency: cfg.currency,
+          locale: cfg.locale || 'en-IN',
+          display_rate: cfg.display_rate || 1.0,
+          tiers: cfg.tiers || [],
+        };
+        applyRegionUI();
+      }
+
       if (!cfg.supabase_url || !cfg.supabase_anon_key) {
         // Supabase not configured — skip auth, show app directly
         document.getElementById('login-overlay').classList.add('hidden');
@@ -2312,7 +2369,7 @@
       const inr = data.balance_inr;
       pill.onclick = () => showRechargeModal();
       pill.classList.remove('low', 'empty');
-      pill.textContent = `₹ ${inr.toFixed(2)}`;
+      pill.textContent = formatMoney(inr);
       pill.title = 'Your credit balance — click to recharge';
       if (inr <= 0) pill.classList.add('empty');
       else if (inr < 20) pill.classList.add('low');
@@ -2320,39 +2377,38 @@
   }
 
   // ── Recharge modal ────────────────────────────────────────────────────────
-  let selectedAmount = 0;
+  let selectedAmount = 0;       // INR rupees (only used for INR custom amount)
+  let selectedTierIndex = -1;   // index into REGION.tiers; -1 means custom INR
 
   function showRechargeModal() {
     running = false;
     ta.disabled = false;
     setSendMode(false);
-    setupRechargeModal(); // locale-aware pack buttons
+    setupRechargeModal();
     document.getElementById('recharge-overlay').classList.remove('hidden');
   }
 
-  function selectPack(amount, el) {
-    selectedAmount = amount;
-    document.getElementById('custom-amount').value = amount;
+  function selectPack(tierIndex, el) {
+    selectedTierIndex = tierIndex;
+    selectedAmount = 0;
+    document.getElementById('custom-amount').value = '';
     document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
     if (el) el.classList.add('selected');
     document.getElementById('pay-btn').disabled = false;
   }
 
   function onCustomAmount() {
+    // Only used for INR users — international users pick tiers only.
+    if (REGION.currency !== 'INR') return;
     const val = parseFloat(document.getElementById('custom-amount').value);
-    if (_isIndiaUser) {
-      selectedAmount = (val >= 10) ? Math.round(val) : 0;
-      document.getElementById('pay-btn').disabled = selectedAmount < 10;
-    } else {
-      // User types USD — convert to INR for Razorpay
-      selectedAmount = (val >= 1) ? Math.round(val * _INR_PER_USD) : 0;
-      document.getElementById('pay-btn').disabled = val < 1;
-    }
+    selectedTierIndex = -1;
+    selectedAmount = (val >= 100) ? Math.round(val) : 0;
+    document.getElementById('pay-btn').disabled = selectedAmount < 100;
     document.querySelectorAll('.pack-btn').forEach(b => b.classList.remove('selected'));
   }
 
   async function startPayment() {
-    if (selectedAmount < 10) return;
+    if (selectedTierIndex < 0 && selectedAmount < 100) return;
     await _startRazorpay();
   }
 
@@ -2363,28 +2419,29 @@
     try {
       const { data: { session } } = await sbClient.auth.getSession();
       const token = session?.access_token || '';
+      const payload = (selectedTierIndex >= 0)
+        ? { tier_index: selectedTierIndex }
+        : { amount_inr: selectedAmount };  // INR custom-amount fallback
       const orderRes = await fetch('/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ amount_inr: selectedAmount }),
+        body: JSON.stringify(payload),
       });
       const order = await orderRes.json();
       if (!orderRes.ok) throw new Error(order.error || 'Order creation failed');
       const options = {
         key: order.key_id,
         amount: order.amount,
-        currency: 'INR',
+        currency: order.currency || REGION.currency,
         name: 'Verd',
-        description: _isIndiaUser
-          ? `Verd — ₹${selectedAmount} top-up`
-          : `Verd — $${Math.round(selectedAmount / _INR_PER_USD)} top-up`,
+        description: `Verd — ${order.currency} ${order.display_amount} top-up`,
         order_id: order.order_id,
         prefill: {
           email: session?.user?.email || '',
           contact: '9999999999',  // dummy — hides the "Enter mobile" screen
         },
         readonly: { contact: true, email: true },
-        theme: { color: '#2563eb' },
+        theme: { color: '#fbbf24' },
         handler: async (response) => {
           const verifyRes = await fetch('/verify-payment', {
             method: 'POST',
@@ -2393,7 +2450,6 @@
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
-              amount_inr: selectedAmount,
             }),
           });
           if (verifyRes.ok) {

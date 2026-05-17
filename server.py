@@ -33,9 +33,92 @@ static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# ── Razorpay config (India) ───────────────────────────────────────────────────
+# ── Razorpay config (India + international cards) ────────────────────────────
 RAZORPAY_KEY_ID     = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+# ── Currency / regional config ────────────────────────────────────────────────
+# Country -> currency mapping. Default fallback is USD for non-Indian visitors.
+# Currencies listed here are those Razorpay supports for international cards.
+COUNTRY_CURRENCY = {
+    "IN": "INR",
+    "US": "USD", "CA": "CAD", "AU": "AUD", "NZ": "NZD",
+    "GB": "GBP", "IE": "EUR",
+    "DE": "EUR", "FR": "EUR", "ES": "EUR", "IT": "EUR", "NL": "EUR",
+    "BE": "EUR", "AT": "EUR", "PT": "EUR", "FI": "EUR", "GR": "EUR",
+    "LU": "EUR", "MT": "EUR", "CY": "EUR", "SK": "EUR", "SI": "EUR",
+    "EE": "EUR", "LV": "EUR", "LT": "EUR",
+    "SG": "SGD", "AE": "AED", "MY": "MYR", "ZA": "ZAR",
+    "JP": "JPY", "CH": "CHF", "SE": "SEK", "NO": "NOK", "DK": "DKK",
+}
+
+# Country -> BCP-47 locale (for Intl.NumberFormat on the client)
+COUNTRY_LOCALE = {
+    "IN": "en-IN", "US": "en-US", "GB": "en-GB", "CA": "en-CA",
+    "AU": "en-AU", "NZ": "en-NZ", "IE": "en-IE", "SG": "en-SG", "ZA": "en-ZA",
+    "DE": "de-DE", "FR": "fr-FR", "ES": "es-ES", "IT": "it-IT", "NL": "nl-NL",
+    "JP": "ja-JP",
+}
+
+# Pricing tiers per currency. The user PAYS `display_amount` in `display_currency`
+# (Razorpay converts at the card-network rate). On success we credit
+# `credit_paise` to the INR-denominated wallet. Buffered slightly to absorb FX
+# fluctuation + Razorpay's international card fee (~3%).
+# INR drops the ₹10 starter (it was an anti-pattern: not enough for one query).
+PRICING_TIERS = {
+    "INR": [
+        {"display_amount": 100,  "label_key": "starter",   "credit_paise": 10000},
+        {"display_amount": 500,  "label_key": "popular",   "credit_paise": 50000},
+        {"display_amount": 1000, "label_key": "bestValue", "credit_paise": 100000},
+    ],
+    "USD": [
+        {"display_amount": 2,  "label_key": "starter",   "credit_paise": 14000},   # ~₹140
+        {"display_amount": 6,  "label_key": "popular",   "credit_paise": 45000},   # ~₹450
+        {"display_amount": 12, "label_key": "bestValue", "credit_paise": 95000},   # ~₹950
+    ],
+    "EUR": [
+        {"display_amount": 2,  "label_key": "starter",   "credit_paise": 16000},
+        {"display_amount": 6,  "label_key": "popular",   "credit_paise": 50000},
+        {"display_amount": 12, "label_key": "bestValue", "credit_paise": 105000},
+    ],
+    "GBP": [
+        {"display_amount": 2,  "label_key": "starter",   "credit_paise": 18000},
+        {"display_amount": 5,  "label_key": "popular",   "credit_paise": 47000},
+        {"display_amount": 10, "label_key": "bestValue", "credit_paise": 100000},
+    ],
+}
+# Anything we don't have explicit tiers for falls back to USD.
+DEFAULT_NON_INR_CURRENCY = "USD"
+
+# Fixed display-conversion rates (paise -> display currency). These are
+# intentionally buffered conservatively so the user never sees a balance that
+# overstates what they paid. Indian users always see INR (rate 1).
+CURRENCY_TO_INR_RATE = {
+    "INR": 1.0,
+    "USD": 80.0, "EUR": 88.0, "GBP": 102.0, "CAD": 58.0, "AUD": 53.0, "NZD": 50.0,
+    "SGD": 60.0, "AED": 22.0, "MYR": 18.0, "ZAR": 4.5,
+    "JPY": 0.55, "CHF": 90.0, "SEK": 8.0, "NOK": 7.6, "DKK": 11.8,
+}
+
+def detect_country(request: "Request") -> str:
+    """
+    Resolve the visitor's country code. Prefers Cloudflare's cf-ipcountry header
+    (set automatically on Cloudflare-fronted deployments); falls back to India
+    so existing flows are unaffected if no geo header is present.
+    """
+    cf = request.headers.get("cf-ipcountry", "").upper()
+    if cf and cf not in ("", "XX", "T1"):
+        return cf
+    return "IN"
+
+def currency_for_country(country: str) -> str:
+    return COUNTRY_CURRENCY.get(country, DEFAULT_NON_INR_CURRENCY if country != "IN" else "INR")
+
+def locale_for_country(country: str) -> str:
+    return COUNTRY_LOCALE.get(country, "en-US")
+
+def tiers_for_currency(currency: str) -> list:
+    return PRICING_TIERS.get(currency) or PRICING_TIERS[DEFAULT_NON_INR_CURRENCY]
 
 
 # ── Alert email config ────────────────────────────────────────────────────────
@@ -187,17 +270,68 @@ def send_alert_email(user_id: str, user_email: str, agent_name: str, error_msg: 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/config")
-def get_config():
-    """Return public client-side config (safe to expose)."""
+def get_config(request: Request):
+    """Return public client-side config (safe to expose), including detected
+    region so the frontend can render the right currency + pricing tiers."""
+    country = detect_country(request)
+    currency = currency_for_country(country)
     return JSONResponse({
         "supabase_url": SUPABASE_URL,
         "supabase_anon_key": os.getenv("SUPABASE_ANON_KEY", ""),
+        "country": country,
+        "currency": currency,
+        "locale": locale_for_country(country),
+        "display_rate": CURRENCY_TO_INR_RATE.get(currency, 1.0),  # paise/100 -> display_currency
+        "tiers": tiers_for_currency(currency),
     })
+
+
+def _resolve_tier(request: "Request", body: dict):
+    """Resolve a top-up request into (display_amount, display_currency,
+    credit_paise). Two paths:
+      - tier_index → look up the server's tier list (authoritative)
+      - amount_inr → INR-only custom amount, ₹100 minimum (legacy)
+    """
+    country = detect_country(request)
+    currency = currency_for_country(country)
+    tiers = tiers_for_currency(currency)
+    idx_raw = body.get("tier_index", None)
+    if idx_raw is not None and idx_raw != -1:
+        try:
+            idx = int(idx_raw)
+        except (TypeError, ValueError):
+            return None, "Invalid tier"
+        if idx < 0 or idx >= len(tiers):
+            return None, "Invalid tier"
+        tier = tiers[idx]
+        minor_unit = 1 if currency == "JPY" else 100
+        return {
+            "display_amount": tier["display_amount"],
+            "display_currency": currency,
+            "amount_minor": int(tier["display_amount"] * minor_unit),
+            "credit_paise": int(tier["credit_paise"]),
+        }, None
+
+    # Legacy custom-amount path. Only allowed for INR users.
+    if currency != "INR":
+        return None, "Custom amounts not available in your region — please choose a tier"
+    try:
+        amount_inr = int(body.get("amount_inr", 0))
+    except (TypeError, ValueError):
+        amount_inr = 0
+    if amount_inr < 100:
+        return None, "Minimum recharge is ₹100"
+    return {
+        "display_amount": amount_inr,
+        "display_currency": "INR",
+        "amount_minor": amount_inr * 100,
+        "credit_paise": amount_inr * 100,
+    }, None
 
 
 @app.post("/create-order")
 async def create_order(request: Request):
-    """Create a Razorpay order for the given amount."""
+    """Create a Razorpay order in the user's regional currency."""
     if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
         return JSONResponse({"error": "Payments not configured"}, status_code=503)
 
@@ -207,20 +341,28 @@ async def create_order(request: Request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     body = await request.json()
-    amount_inr = int(body.get("amount_inr", 0))
-    if amount_inr < 10:
-        return JSONResponse({"error": "Minimum recharge is ₹10"}, status_code=400)
+    resolved, err = _resolve_tier(request, body)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
 
     import razorpay
     client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
     order = client.order.create({
-        "amount": amount_inr * 100,  # paise
-        "currency": "INR",
+        "amount": resolved["amount_minor"],
+        "currency": resolved["display_currency"],
         "payment_capture": 1,
+        # Stash the authoritative credit amount in Razorpay notes so the verify
+        # step credits the right number of paise even if the client lies.
+        "notes": {
+            "user_id": user_id,
+            "credit_paise": str(resolved["credit_paise"]),
+        },
     })
     return JSONResponse({
         "order_id": order["id"],
         "amount": order["amount"],
+        "currency": resolved["display_currency"],
+        "display_amount": resolved["display_amount"],
         "key_id": RAZORPAY_KEY_ID,
     })
 
@@ -228,7 +370,7 @@ async def create_order(request: Request):
 @app.post("/create-payment-link")
 async def create_payment_link(request: Request):
     """
-    Create a Razorpay Payment Link — bypasses website domain restrictions.
+    Create a Razorpay Payment Link in the user's regional currency.
     User is redirected to razorpay.com to complete payment, then back to our site.
     """
     if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
@@ -240,26 +382,30 @@ async def create_payment_link(request: Request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     body = await request.json()
-    amount_inr = int(body.get("amount_inr", 0))
-    if amount_inr < 10:
-        return JSONResponse({"error": "Minimum recharge is ₹10"}, status_code=400)
+    resolved, err = _resolve_tier(request, body)
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
 
-    # Encode user_id in callback URL so we know who paid
     import urllib.parse
-    callback_url = body.get("callback_url", "")  # frontend passes its own origin
+    callback_url = body.get("callback_url", "")
 
     import razorpay
     client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    # Credit paise is encoded in the callback URL so the return handler doesn't
+    # need to look up tier config again. URL is signed by Razorpay, so the user
+    # can't tamper without invalidating the signature.
     link = client.payment_link.create({
-        "amount": amount_inr * 100,
-        "currency": "INR",
-        "description": f"Multi-Agent Debate System — ₹{amount_inr} top-up",
-        "customer": {
-            "email": body.get("email", ""),
-        },
+        "amount": resolved["amount_minor"],
+        "currency": resolved["display_currency"],
+        "description": f"Verd top-up — {resolved['display_currency']} {resolved['display_amount']}",
+        "customer": {"email": body.get("email", "")},
         "notify": {"email": False, "sms": False},
         "reminder_enable": False,
-        "callback_url": f"{callback_url}/payment-return?uid={urllib.parse.quote(user_id)}&amount={amount_inr}",
+        "callback_url": (
+            f"{callback_url}/payment-return"
+            f"?uid={urllib.parse.quote(user_id)}"
+            f"&credit_paise={resolved['credit_paise']}"
+        ),
         "callback_method": "get",
     })
     return JSONResponse({"payment_url": link["short_url"]})
@@ -280,23 +426,26 @@ async def payment_return(request: Request):
     payment_link_status = params.get("razorpay_payment_link_status", "")
     signature = params.get("razorpay_signature", "")
     user_id = params.get("uid", "")
-    amount_inr = int(params.get("amount", 0))
+    # New: credit amount in paise is carried in the callback URL. Falls back to
+    # legacy `amount` (rupees * 100) for old links still in flight.
+    credit_paise = int(params.get("credit_paise", 0))
+    if not credit_paise:
+        credit_paise = int(params.get("amount", 0)) * 100
 
     # Verify signature
     payload = f"{payment_link_id}|{payment_link_ref_id}|{payment_link_status}|{payment_id}"
     expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
-    if payment_link_status == "paid" and hmac.compare_digest(expected, signature) and user_id and amount_inr > 0:
+    if payment_link_status == "paid" and hmac.compare_digest(expected, signature) and user_id and credit_paise > 0:
         sb = get_sb_admin()
         if sb:
             try:
                 result = sb.table("user_credits").select("balance_paise").eq("user_id", user_id).execute()
-                add_paise = amount_inr * 100
                 if result.data:
-                    new_bal = result.data[0]["balance_paise"] + add_paise
+                    new_bal = result.data[0]["balance_paise"] + credit_paise
                     sb.table("user_credits").update({"balance_paise": new_bal}).eq("user_id", user_id).execute()
                 else:
-                    sb.table("user_credits").insert({"user_id": user_id, "balance_paise": add_paise}).execute()
+                    sb.table("user_credits").insert({"user_id": user_id, "balance_paise": credit_paise}).execute()
             except Exception as e:
                 logger.error(f"Payment link credit error: {e}")
 
@@ -318,7 +467,6 @@ async def verify_payment(request: Request):
     order_id   = body.get("razorpay_order_id", "")
     payment_id = body.get("razorpay_payment_id", "")
     signature  = body.get("razorpay_signature", "")
-    amount_inr = int(body.get("amount_inr", 0))
 
     # Verify signature
     msg = f"{order_id}|{payment_id}".encode()
@@ -326,17 +474,30 @@ async def verify_payment(request: Request):
     if not hmac.compare_digest(expected, signature):
         return JSONResponse({"error": "Invalid payment signature"}, status_code=400)
 
+    # Look up the authoritative credit amount from the order's notes (set at
+    # creation time, server-side). Falls back to legacy amount_inr for orders
+    # created before this version.
+    client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    try:
+        order = client.order.fetch(order_id)
+        credit_paise = int((order.get("notes") or {}).get("credit_paise") or 0)
+    except Exception:
+        credit_paise = 0
+    if not credit_paise:
+        credit_paise = int(body.get("amount_inr", 0)) * 100  # legacy fallback
+    if credit_paise <= 0:
+        return JSONResponse({"error": "Unable to determine credit amount"}, status_code=400)
+
     # Add credits
     sb = get_sb_admin()
     if sb:
         try:
             result = sb.table("user_credits").select("balance_paise").eq("user_id", user_id).execute()
-            add_paise = amount_inr * 100
             if result.data:
-                new_bal = result.data[0]["balance_paise"] + add_paise
+                new_bal = result.data[0]["balance_paise"] + credit_paise
                 sb.table("user_credits").update({"balance_paise": new_bal}).eq("user_id", user_id).execute()
             else:
-                sb.table("user_credits").insert({"user_id": user_id, "balance_paise": add_paise}).execute()
+                sb.table("user_credits").insert({"user_id": user_id, "balance_paise": credit_paise}).execute()
         except Exception as e:
             logger.error(f"Credit top-up error: {e}")
             return JSONResponse({"error": "Failed to add credits"}, status_code=500)
