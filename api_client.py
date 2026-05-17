@@ -130,6 +130,14 @@ class APIClient:
             f"?key={api_key}"
         )
 
+        generation_config = {
+            "maxOutputTokens": max_tokens,
+            "temperature": 0.7,
+        }
+        # Disable thinking only for flash models — pro requires thinking mode.
+        if "flash" in model:
+            generation_config["thinkingConfig"] = {"thinkingBudget": 0}
+
         payload = {
             "system_instruction": {
                 "parts": [{"text": system_prompt}]
@@ -140,13 +148,7 @@ class APIClient:
                     "parts": [{"text": user_prompt}]
                 }
             ],
-            "generationConfig": {
-                "maxOutputTokens": max_tokens,
-                "temperature": 0.7,
-                # Disable thinking for gemini-2.5-flash (thinking model) —
-                # avoids thinking-token overhead and unexpected thought parts in output.
-                "thinkingConfig": {"thinkingBudget": 0},
-            },
+            "generationConfig": generation_config,
         }
 
         # Enable Google Search grounding for the Researcher agent
