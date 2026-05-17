@@ -959,22 +959,34 @@
 <script>
   // ── Config ────────────────────────────────────────────────────────────────
   const AGENT_META = {
-    visionary:          { emoji:'🔮', lc:'l1', layer:'Layer 1 — Exploration' },
-    researcher:         { emoji:'🔬', lc:'l1', layer:'Layer 1 — Exploration' },
-    critic:             { emoji:'🔍', lc:'l2', layer:'Layer 2 — Debate' },
-    defender:           { emoji:'🛡️', lc:'l2', layer:'Layer 2 — Debate' },
-    devils_advocate:    { emoji:'😈', lc:'l2', layer:'Layer 2 — Debate' },
-    context_distiller:  { emoji:'🗜️', lc:'lc', layer:'Layer 2.5 — Compression' },
-    mediator:           { emoji:'⚖️', lc:'l3', layer:'Layer 3 — Resolution' },
-    architect:          { emoji:'🏗️', lc:'l3', layer:'Layer 3 — Resolution' },
-    validator:          { emoji:'✅', lc:'l4', layer:'Layer 4 — Validation' },
-    summarizer:         { emoji:'📋', lc:'l4', layer:'Layer 4 — Final Output' },
+    visionary:          { emoji:'🔮', lc:'l1', layer:'Layer 1 — Exploration',     bio:'Explores radical possibilities others won’t' },
+    researcher:         { emoji:'🔬', lc:'l1', layer:'Layer 1 — Exploration',     bio:'Grounds every idea in real-world evidence' },
+    critic:             { emoji:'🔍', lc:'l2', layer:'Layer 2 — Debate',          bio:'Hunts for fatal flaws and hidden assumptions' },
+    defender:           { emoji:'🛡️', lc:'l2', layer:'Layer 2 — Debate',          bio:'Argues the strongest case for each option' },
+    devils_advocate:    { emoji:'😈', lc:'l2', layer:'Layer 2 — Debate',          bio:'Asks if you’re solving the wrong problem' },
+    context_distiller:  { emoji:'🗜️', lc:'lc', layer:'Layer 2.5 — Compression',   bio:'Compresses noise into signal' },
+    mediator:           { emoji:'⚖️', lc:'l3', layer:'Layer 3 — Resolution',      bio:'Finds where the agents actually agree' },
+    architect:          { emoji:'🏗️', lc:'l3', layer:'Layer 3 — Resolution',      bio:'Turns the verdict into a concrete plan' },
+    validator:          { emoji:'✅', lc:'l4', layer:'Layer 4 — Validation',      bio:'Stress-tests the final answer' },
+    summarizer:         { emoji:'📋', lc:'l4', layer:'Layer 4 — Final Output',    bio:'Delivers the verdict in plain language' },
   };
 
   const PROVIDER_CLASS = {
     deepseek:'p-deepseek', gemini:'p-gemini',
     anthropic:'p-anthropic', openai:'p-openai',
   };
+
+  // Apply agent bios as native hover-tooltips on every sidebar row.
+  // Reads from AGENT_META so bios stay defined in one place.
+  function applyAgentBios() {
+    document.querySelectorAll('.agent-row').forEach(row => {
+      const dot = row.querySelector('.dot[id^="d-"]');
+      if (!dot) return;
+      const agent = dot.id.slice(2); // strip "d-"
+      const meta = AGENT_META[agent];
+      if (meta?.bio) row.title = meta.bio;
+    });
+  }
 
   // ── State ─────────────────────────────────────────────────────────────────
   const MARKUP_INR = 2.0; // ₹2 profit per query — added server-side, shown as total to user
@@ -1435,10 +1447,19 @@
     document.getElementById('progress-fill').style.width = (n / ACTIVE_TOTAL * 100) + '%';
   }
 
+  // Format seconds as "Xm Ys" once >=60s, else "Ys". Accepts numbers or numeric strings.
+  function formatDuration(seconds) {
+    const s = Math.round(Number(seconds) || 0);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return r ? `${m}m ${r}s` : `${m}m`;
+  }
+
   function addCost(costInr, inTok, outTok) {
     totalCost += costInr; totalIn += inTok; totalOut += outTok;
     const displayCost = totalCost + sessionMarkup;
-    document.getElementById('total-cost').textContent = '₹ ' + displayCost.toFixed(4);
+    document.getElementById('total-cost').textContent = '₹ ' + displayCost.toFixed(2);
     document.getElementById('total-tokens').textContent =
       (totalIn + totalOut).toLocaleString() + ' ' + t('tokens');
     // Update balance pill in real-time as session cost accumulates
@@ -1557,7 +1578,7 @@
       card.className = 'a-card is-final';
       card.innerHTML = `
         <div class="final-label">✨ ${t('finalAnswer')}</div>
-        <div class="a-header">
+        <div class="a-header" title="${AGENT_META.summarizer.bio}">
           <span class="a-emoji">📋</span>
           <span class="a-name">Summarizer</span>
         </div>
@@ -1639,7 +1660,7 @@
 
     card.innerHTML = `
       ${isFinal ? `<div class="final-label">✨ ${t('finalAnswer')}</div>` : ''}
-      <div class="a-header">
+      <div class="a-header"${m.bio ? ` title="${m.bio.replace(/"/g,'&quot;')}"` : ''}>
         <span class="a-emoji">${m.emoji || '🤖'}</span>
         <div class="a-meta">
           <div class="a-name">${display}</div>
@@ -1671,8 +1692,8 @@
     footer.innerHTML = `
       <span class="f-stat">📥 ${inTok.toLocaleString()} in</span>
       <span class="f-stat">📤 ${outTok.toLocaleString()} out</span>
-      <span class="f-stat">💰 <span class="f-cost">₹ ${costInr.toFixed(4)}</span></span>
-      <span class="f-stat">⏱ ${elapsed}s</span>`;
+      <span class="f-stat">💰 <span class="f-cost">₹ ${costInr.toFixed(2)}</span></span>
+      <span class="f-stat">⏱ ${formatDuration(elapsed)}</span>`;
 
     body.innerHTML = '';
     body.appendChild(md);
@@ -1763,8 +1784,8 @@
         sessionMarkup += MARKUP_INR;
         const chargedInr = (ev.total_cost_inr || totalCost) + MARKUP_INR;
         const displayCostFinal = totalCost + sessionMarkup;
-        document.getElementById('total-cost').textContent = '₹ ' + displayCostFinal.toFixed(4);
-        setStatus(`✓ Done  ₹ ${chargedInr.toFixed(2)}  •  ${ev.elapsed}s`);
+        document.getElementById('total-cost').textContent = '₹ ' + displayCostFinal.toFixed(2);
+        setStatus(`✓ Done  ₹ ${chargedInr.toFixed(2)}  •  ${formatDuration(ev.elapsed)}`);
         // Save this turn to history
         if (currentIdea && currentSummarizerOutput) {
           chatHistory.push({ q: currentIdea, a: currentSummarizerOutput });
@@ -2209,6 +2230,9 @@
 
   // Render welcome screen
   chat().appendChild(buildWelcome());
+
+  // Attach agent personality bios to sidebar (native hover-tooltips)
+  applyAgentBios();
 
   // Init recharge modal with locale-correct packs (before user opens it)
   setupRechargeModal();
