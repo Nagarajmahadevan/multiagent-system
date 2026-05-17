@@ -404,6 +404,18 @@ def llms():
     return HTMLResponse((static_dir / "llms.txt").read_text(), media_type="text/plain")
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy():
+    """Privacy Policy as a real indexable page (not just a modal)."""
+    return HTMLResponse((static_dir / "privacy.html").read_text(encoding="utf-8"))
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms():
+    """Terms of Service as a real indexable page."""
+    return HTMLResponse((static_dir / "terms.html").read_text(encoding="utf-8"))
+
+
 @app.post("/api/title")
 async def generate_title(request: Request):
     """

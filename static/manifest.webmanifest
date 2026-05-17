@@ -1,0 +1,26 @@
+{
+  "name": "Verd",
+  "short_name": "Verd",
+  "description": "Ask anything. Get your verdict. 10 AI agents debate every question.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#212121",
+  "theme_color": "#fbbf24",
+  "orientation": "any",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
