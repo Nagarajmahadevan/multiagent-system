@@ -33,11 +33,11 @@ AGENT_LAYERS = {
     "critic": "Layer 2 — Debate",
     "defender": "Layer 2 — Debate",
     "devils_advocate": "Layer 2 — Debate",
-    "context_distiller": "Layer 2.5 — Compression",
+    "context_distiller": "Layer 2.5 — Distillation",
     "mediator": "Layer 3 — Resolution",
     "architect": "Layer 3 — Resolution",
-    "validator": "Layer 4 — Validation",
-    "summarizer": "Layer 4 — Final Output",
+    "validator": "Layer 4 — Verdict",
+    "summarizer": "Layer 4 — Verdict",
 }
 
 AGENT_DISPLAY_NAMES = {

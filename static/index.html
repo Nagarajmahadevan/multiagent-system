@@ -242,7 +242,23 @@
     #welcome h2  { font-size: 26px; font-weight:700; color:var(--text); margin-bottom:8px; }
     #welcome p   { font-size: 14px; line-height:1.6; max-width:380px; }
     .agent-tags  { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:18px; max-width:480px; }
-    .agent-tag   { font-size:11px; padding:3px 10px; border-radius:999px; border:1px solid #3a3a3a; color:var(--muted); }
+    .agent-tag   { font-size:11px; padding:3px 10px; border-radius:999px; border:1px solid #3a3a3a; color:var(--muted); cursor:default; }
+
+    /* Suggested-prompt chips — anchor first-time users to high-value questions */
+    .prompt-chips {
+      display:flex; flex-wrap:wrap; gap:8px; justify-content:center;
+      margin-top: 26px; max-width: 560px;
+    }
+    .prompt-chip {
+      font: inherit; font-size: 13px; line-height: 1.4;
+      padding: 9px 14px; border-radius: 10px;
+      background: rgba(251,191,36,.04); border: 1px solid rgba(251,191,36,.18);
+      color: var(--text); cursor: pointer;
+      transition: background .15s, border-color .15s, transform .1s;
+      text-align: left;
+    }
+    .prompt-chip:hover   { background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.35); }
+    .prompt-chip:active  { transform: translateY(1px); }
 
     /* complexity banner */
     .complexity-banner {
@@ -290,8 +306,14 @@
     }
     @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 
-    .a-card.running  { border-color:#fbbf2466; }
-    .a-card.is-final { border-color:#a78bfa66; box-shadow: 0 0 0 1px rgba(167,139,250,.15); }
+    /* running/is-final highlights — only touch top/right/bottom so the agent's left-color survives */
+    .a-card.running  {
+      border-top-color:#fbbf2466; border-right-color:#fbbf2466; border-bottom-color:#fbbf2466;
+    }
+    .a-card.is-final {
+      border-top-color:#fde68a44; border-right-color:#fde68a44; border-bottom-color:#fde68a44;
+      box-shadow: 0 0 0 1px rgba(253,230,138,.10);
+    }
 
     /* card header */
     .a-header {
@@ -363,11 +385,24 @@
     .f-stat { display:flex; align-items:center; gap:4px; }
     .f-cost { color:#4ade80; font-weight:700; }
 
-    /* final card label */
+    /* final card label — the gavel moment */
     .final-label {
-      font-size:10px; font-weight:700; text-transform:uppercase;
-      letter-spacing:.08em; color:#a78bfa; padding:6px 15px 0;
+      font-size:11px; font-weight:700; text-transform:uppercase;
+      letter-spacing:.12em; color:#fbbf24; padding:10px 16px 2px;
     }
+
+    /* Verdict hierarchy — only inside the final (Summarizer) card */
+    .a-card.is-final .md-out > h2:first-child {
+      font-size: 22px; font-weight: 700; color: #fde68a;
+      margin: 4px 0 10px; letter-spacing: -.01em;
+    }
+    .a-card.is-final .md-out h2 {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      margin: 20px 0 8px; letter-spacing: .01em;
+    }
+    .a-card.is-final .md-out p,
+    .a-card.is-final .md-out li { font-size: 15px; line-height: 1.65; }
+    .a-card.is-final .md-out strong { color: #fde68a; font-weight: 600; }
 
     /* collapsible non-key agent cards */
     .a-card.is-collapsible .a-header { cursor:pointer; user-select:none; }
@@ -943,7 +978,7 @@
     </div>
 
     <div class="layer-group">
-      <div class="layer-label" style="color:#67e8f9">Layer 2.5 — Compression</div>
+      <div class="layer-label" style="color:#67e8f9">Layer 2.5 — Distillation</div>
       <div class="agent-row" id="row-context_distiller"><span class="dot" id="d-context_distiller"></span>
         <span class="agent-row-name">🗜️ Context Distiller</span>
         <span class="agent-row-model">deepseek-chat</span></div>
@@ -960,7 +995,7 @@
     </div>
 
     <div class="layer-group">
-      <div class="layer-label" style="color:var(--l4)">Layer 4 — Validation</div>
+      <div class="layer-label" style="color:var(--l4)">Layer 4 — Verdict</div>
       <div class="agent-row" id="row-validator"><span class="dot" id="d-validator"></span>
         <span class="agent-row-name">✅ Validator</span>
         <span class="agent-row-model">gpt-5</span></div>
@@ -1009,11 +1044,11 @@
     critic:             { emoji:'🔍', lc:'l2', layer:'Layer 2 — Debate',          color:'#fb923c', bio:'Hunts for fatal flaws and hidden assumptions' },
     defender:           { emoji:'🛡️', lc:'l2', layer:'Layer 2 — Debate',          color:'#38bdf8', bio:'Argues the strongest case for each option' },
     devils_advocate:    { emoji:'😈', lc:'l2', layer:'Layer 2 — Debate',          color:'#ec4899', bio:'Asks if you’re solving the wrong problem' },
-    context_distiller:  { emoji:'🗜️', lc:'lc', layer:'Layer 2.5 — Compression',   color:'#94a3b8', bio:'Compresses noise into signal' },
+    context_distiller:  { emoji:'🗜️', lc:'lc', layer:'Layer 2.5 — Distillation',   color:'#94a3b8', bio:'Compresses noise into signal' },
     mediator:           { emoji:'⚖️', lc:'l3', layer:'Layer 3 — Resolution',      color:'#f59e0b', bio:'Finds where the agents actually agree' },
     architect:          { emoji:'🏗️', lc:'l3', layer:'Layer 3 — Resolution',      color:'#818cf8', bio:'Turns the verdict into a concrete plan' },
-    validator:          { emoji:'✅', lc:'l4', layer:'Layer 4 — Validation',      color:'#4ade80', bio:'Stress-tests the final answer' },
-    summarizer:         { emoji:'📋', lc:'l4', layer:'Layer 4 — Final Output',    color:'#fde68a', bio:'Delivers the verdict in plain language' },
+    validator:          { emoji:'✅', lc:'l4', layer:'Layer 4 — Verdict',         color:'#4ade80', bio:'Stress-tests the final answer' },
+    summarizer:         { emoji:'📋', lc:'l4', layer:'Layer 4 — Verdict',         color:'#fde68a', bio:'Delivers the verdict in plain language' },
   };
 
   const PROVIDER_CLASS = {
@@ -1738,25 +1773,45 @@
     renderConvList();
   }
 
+  // Display names for agent pills — title-case, with two special cases.
+  const _AGENT_DISPLAY = {
+    visionary:'Visionary', researcher:'Researcher', critic:'Critic',
+    defender:'Defender', devils_advocate:"Devil's Advocate",
+    context_distiller:'Context Distiller', mediator:'Mediator',
+    architect:'Architect', validator:'Validator', summarizer:'Summarizer',
+  };
+
+  // Suggested first-time prompts — anchor users toward high-judgment questions.
+  const _SUGGESTED_PROMPTS = [
+    "Should I quit my stable job to start a company?",
+    "Help me decide between two competing job offers",
+    "Is this business idea worth pursuing — or am I in love with it?",
+    "Review my investment thesis and find the holes",
+  ];
+
+  function useSuggestedPrompt(text) {
+    const ta = document.getElementById('user-input');
+    if (!ta) return;
+    ta.value = text;
+    ta.focus();
+    ta.dispatchEvent(new Event('input', { bubbles: true })); // re-triggers auto-grow
+  }
+
   function buildWelcome() {
     const w = document.createElement('div');
     w.id = 'welcome';
+    const tags = Object.entries(AGENT_META).map(([key, m]) =>
+      `<span class="agent-tag" title="${m.bio}">${m.emoji} ${_AGENT_DISPLAY[key]}</span>`
+    ).join('');
+    const chips = _SUGGESTED_PROMPTS.map(p =>
+      `<button class="prompt-chip" type="button" onclick="useSuggestedPrompt(this.dataset.p)" data-p="${p.replace(/"/g,'&quot;')}">${p}</button>`
+    ).join('');
     w.innerHTML = `
       <div class="w-icon">⚖️</div>
       <h2>${t('heroTitle')}</h2>
       <p>${t('heroDesc')}</p>
-      <div class="agent-tags">
-        <span class="agent-tag">🔮 Visionary</span>
-        <span class="agent-tag">🔬 Researcher</span>
-        <span class="agent-tag">🔍 Critic</span>
-        <span class="agent-tag">🛡️ Defender</span>
-        <span class="agent-tag">😈 Devil's Advocate</span>
-        <span class="agent-tag">🗜️ Context Distiller</span>
-        <span class="agent-tag">⚖️ Mediator</span>
-        <span class="agent-tag">🏗️ Architect</span>
-        <span class="agent-tag">✅ Validator</span>
-        <span class="agent-tag">📋 Summarizer</span>
-      </div>`;
+      <div class="agent-tags">${tags}</div>
+      <div class="prompt-chips">${chips}</div>`;
     return w;
   }
 
