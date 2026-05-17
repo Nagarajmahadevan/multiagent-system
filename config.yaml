@@ -57,7 +57,7 @@ agents:
 
   # --- LAYER 2.5: COMPRESSION ---
   context_distiller:
-    model: "deepseek-reasoner"
+    model: "deepseek-chat"
     provider: "deepseek"
 
   # --- LAYER 3: RESOLUTION ---
@@ -75,7 +75,7 @@ agents:
     provider: "openai"
 
   summarizer:
-    model: "deepseek-reasoner"
+    model: "deepseek-chat"
     provider: "deepseek"
 
 
@@ -89,11 +89,11 @@ token_limits:
   critic: 6000
   defender: 8000
   devils_advocate: 5000
-  context_distiller: 5000
+  context_distiller: 3000
   mediator: 8000
   architect: 8000
   validator: 8000
-  summarizer: 6000
+  summarizer: 4000
 
 
 # =============================================================================
