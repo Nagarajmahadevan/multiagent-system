@@ -35,47 +35,47 @@ agents:
 
   # --- LAYER 1: EXPLORATION ---
   visionary:
-    model: "deepseek-chat"
+    model: "deepseek-reasoner"
     provider: "deepseek"
 
   researcher:
-    model: "gemini-2.5-flash"
+    model: "gemini-2.5-pro"
     provider: "gemini"
 
   # --- LAYER 2: DEBATE ---
   critic:
-    model: "deepseek-chat"
+    model: "deepseek-reasoner"
     provider: "deepseek"
 
   defender:
-    model: "gpt-4o-mini"
+    model: "gpt-5"
     provider: "openai"
 
   devils_advocate:
-    model: "gemini-2.5-flash"
+    model: "gemini-2.5-pro"
     provider: "gemini"
 
   # --- LAYER 2.5: COMPRESSION ---
   context_distiller:
-    model: "deepseek-chat"
+    model: "deepseek-reasoner"
     provider: "deepseek"
 
   # --- LAYER 3: RESOLUTION ---
   mediator:
-    model: "claude-sonnet-4-6"
+    model: "claude-opus-4-7"
     provider: "anthropic"
 
   architect:
-    model: "claude-sonnet-4-6"
+    model: "claude-opus-4-7"
     provider: "anthropic"
 
   # --- LAYER 4: VALIDATION ---
   validator:
-    model: "gpt-4o"
+    model: "gpt-5"
     provider: "openai"
 
   summarizer:
-    model: "deepseek-chat"
+    model: "deepseek-reasoner"
     provider: "deepseek"
 
 
@@ -113,6 +113,10 @@ pricing:
     input_per_million: 25
     output_per_million: 210
 
+  gemini-2.5-pro:
+    input_per_million: 105
+    output_per_million: 840
+
   gpt-4o-mini:
     input_per_million: 21
     output_per_million: 168
@@ -121,9 +125,17 @@ pricing:
     input_per_million: 208
     output_per_million: 835
 
+  gpt-5:
+    input_per_million: 105
+    output_per_million: 835
+
   claude-sonnet-4-6:
     input_per_million: 253
     output_per_million: 1265
+
+  claude-opus-4-7:
+    input_per_million: 1265
+    output_per_million: 6325
 
 
 # =============================================================================
