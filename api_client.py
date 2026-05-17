@@ -105,8 +105,11 @@ class APIClient:
         data = resp.json()
 
         choice = data["choices"][0]
-        # DeepSeek R1 may return reasoning_content alongside content
-        content = choice["message"].get("content") or ""
+        message = choice["message"]
+        # DeepSeek R1 may return reasoning_content separately. If the answer
+        # was truncated mid-reasoning and content is empty, fall back to
+        # reasoning_content so downstream agents have something to work with.
+        content = message.get("content") or message.get("reasoning_content") or ""
         usage = data.get("usage", {})
 
         return {
